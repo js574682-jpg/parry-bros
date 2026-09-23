@@ -320,6 +320,12 @@ p{margin:0;line-height:1.45;color:#c4c7e4;}
 .diffbtn i{font-style:normal;font-size:13px;font-weight:700;color:#ff9fb3;}
 .diffbtn.hard{background:linear-gradient(180deg,#3d1d2d,#1b1d33);box-shadow:inset 0 0 0 2px #ff4470aa;}
 .diffbtn.hard b{color:#ff6b8a;}
+.diffbtn.easy{background:linear-gradient(180deg,#1d3a36,#1b1d33);box-shadow:inset 0 0 0 2px #6fe3c3aa;}
+.diffbtn.easy b{color:#6fe3c3;}
+.diffbtn.nightmare{background:linear-gradient(180deg,#2a0d1c,#0d0e1c);box-shadow:inset 0 0 0 2px #c065ffcc;}
+.diffbtn.nightmare b{color:#d98bff;}
+.diffbtn:disabled{opacity:.45;cursor:default;}
+.diffbtn:disabled:active{transform:none;}
 .diffbtn:active{transform:translateY(1px);}
 #synpop.show{opacity:1;transform:translate(-50%,-50%) scale(1);}
 #synpop b{font-family:var(--display);font-size:30px;display:block;line-height:1.05;margin:2px 0 4px;}
@@ -489,8 +495,10 @@ p{margin:0;line-height:1.45;color:#c4c7e4;}
     <div class="wrap card" style="margin-block:auto">
       <div class="eyebrow">The tower</div>
       <h2 style="font-size:34px">Pick a difficulty</h2>
+      <button class="diffbtn easy" id="btn-diff-easy"><b>Easy</b><span>Parry timing is 40% more forgiving. Enemies have 30% less health.</span><i id="diff-easy-best"></i></button>
       <button class="diffbtn" id="btn-diff-normal"><b>Normal</b><span>Tap anywhere to parry. The way the tower was meant to be climbed.</span></button>
-      <button class="diffbtn hard" id="btn-diff-hard"><b>Hard</b><span>You have to tap on the side the attack is coming from. Enemies hit 20% harder. You earn 50% more Embers and XP.</span><i id="diff-hard-best"></i></button>
+      <button class="diffbtn hard" id="btn-diff-hard"><b>Hard</b><span>Enemies have 20% more health. You have 15% less health. You earn 50% more Embers and XP.</span><i id="diff-hard-best"></i></button>
+      <button class="diffbtn nightmare" id="btn-diff-nightmare"><b>Nightmare</b><span>You have to tap on the side the attack is coming from. Every floor is a random special floor. Parry timing is 20% tighter, enemies have 25% more health, and you have 25% less health. You earn double Embers and XP.</span><i id="diff-nightmare-best"></i></button>
       <button class="btn ghost" id="btn-diff-cancel">Cancel</button>
     </div>
   </section>
@@ -1134,7 +1142,7 @@ const minionPos = i => {
 const minionHome = i => { const p = { x:HX() + Math.cos(MINION_ANG[i]) * L.orbit, y:HY() + Math.sin(MINION_ANG[i]) * L.orbit }; clampToArena(p, 0.98); return p; };
 
 /* scaling */
-const hpMul   = f => Math.pow(1.19, f - 1);
+const hpMul   = f => Math.pow(1.19, f - 1) * (run && !run.training ? DIFF().enemyHp : 1);
 const dmgMul  = f => Math.pow(1.085, f - 1);
 const spdMul  = f => Math.min(1.7, 1 + 0.028 * (f - 1));
 const intMul  = f => Math.max(0.62, 1 - 0.022 * (f - 1));
@@ -1145,6 +1153,15 @@ const isBossFloor = f => f % 5 === 0;
 // You may swing in the GOODW seconds before contact; the last PERFW of those is a Perfect.
 // LAT is a small grace for touch latency: contact damage lands that much after the visual touch.
 const GOODW = 0.26, PERFW = 0.10, SUPERW = 0.03, LAT = 0.06;   // SUPERW: frame-tight, right on the hit
+// Difficulties. timing scales the parry window, enemyHp/heroHp scale health, reward scales Embers and XP.
+// aim: you must swing toward the attack. twists: every non-boss floor is a random special floor.
+const DIFFS = {
+  easy:      { name:'Easy',      color:'#6fe3c3', timing:1.4, enemyHp:0.7,  heroHp:1,    reward:1 },
+  normal:    { name:'Normal',    color:'#dfe1f5', timing:1,   enemyHp:1,    heroHp:1,    reward:1 },
+  hard:      { name:'Hard',      color:'#ff6b8a', timing:1,   enemyHp:1.2,  heroHp:0.85, reward:1.5 },
+  nightmare: { name:'Nightmare', color:'#d98bff', timing:0.8, enemyHp:1.25, heroHp:0.75, reward:2, aim:true, twists:true },
+};
+const DIFF = () => DIFFS[(run && run.diff) || 'normal'];
 // A missed swing drops your sword for a moment. Parrying a Mirage fake drops it a bit longer. Nothing stacks.
 const WHIFF_LOCK = 0.4, FAKE_LOCK = 0.7;
 // Charged Parry: hold this long before charging starts, so quick taps stay quick
@@ -1176,6 +1193,7 @@ function timingMul(){
   if (boon('heavy')) m *= 1.3;
   if (boon('fortress')) m *= syn('ironwall') ? 0.9 : 0.75;
   if (cls() === 'oneeyed') m *= lv5() ? 1.1 * 1.15 : 1.1;
+  if (!run.training) m *= DIFF().timing;
   return m;
 }
 // conditional boons that boost everything you (and your ult) deal
@@ -1260,6 +1278,7 @@ function startFloor(){
   if (boon('divine') && !run.shield && (isBossFloor(f) || f >= run.shieldAt)) { run.shield = true; toast('Divine Shield is back'); }
   run.banner = 1.6; run.bannerText = 'Floor ' + f; run.bossName = '';
   run.twist = isBossFloor(f) ? null : (run.nextTwist || null); run.nextTwist = null;
+  if (DIFF().twists && !run.training && !isBossFloor(f)) { run.twist = pick(TWISTS.filter(t => t.id !== run.lastTwist)).id; run.lastTwist = run.twist; }
   run.eliteAt = [];
   if (twistOn('alone')) { run.benched = run.minions; run.minions = [null, null, null]; }
   const pool = Object.entries(ENEMIES).filter(([, e]) => f >= e.minFloor).map(([k, e]) => ({ v:k, w:e.weight }));
@@ -1407,7 +1426,6 @@ function fireShot(kind, fx, fy, from, dmgBase, color, travel, carrier, opts){
   const src = from === 'boss' ? run.boss : from;
   if (src && src.sap > 0) dmgBase *= src.sapK || 0.75;
   if (src && src.elite) dmgBase *= 1.3;
-  if (run.hard) dmgBase *= 1.2;
   if (twistOn('frenzy') && from !== 'boss') dmgBase *= 0.8;
   if (kind === 'lance') { dir = carrier.lanceDir; v = Math.max(v, 520 * L.scale); }
   const p = { kind, x:fx, y:fy, dir, v, v0:v, vx:Math.cos(dir) * v, vy:Math.sin(dir) * v,
@@ -2021,16 +2039,16 @@ function nearestOthers(x, y, skip, n){
   return run.enemies.filter(e => !e.dead && e !== skip).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y)).slice(0, n);
 }
 // the attack you'd hit if you swung right now
-// Hard mode: you have to swing toward the attack. This is where you last tapped (or where the mouse is).
+// Nightmare mode: you have to swing toward the attack. This is where you last tapped (or where the mouse is).
 let aimPt = null;
 const HARD_ARC = 1.0;                                       // about 57 degrees either side
-const aimDir = () => run && run.hard && aimPt ? Math.atan2(aimPt.y - HY(), aimPt.x - HX()) : null;
+const aimDir = () => run && !run.training && DIFF().aim && aimPt ? Math.atan2(aimPt.y - HY(), aimPt.x - HX()) : null;
 const angGap = (a, b) => Math.abs(((a - b + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI);
 function findParryTarget(dir){
   let best = null, bestT = Infinity;
   for (const p of run.eproj) {
     if (p.dead || p.reflected || p.deflected) continue;
-    if (dir != null && angGap(p.ang, dir) > HARD_ARC) continue;   // Hard mode: wrong side
+    if (dir != null && angGap(p.ang, dir) > HARD_ARC) continue;   // Nightmare mode: wrong side
     if (p.blink && p.blink.state === 1) continue;       // not back yet
     const tc = timeToRing(p);
     if (tc < -LAT) continue;                             // already landed: too late to save
@@ -3314,7 +3332,7 @@ function drawGuard(g, t){
     for (const a of marks) { g.globalAlpha = 0.35 + Math.sin(t * 8) * 0.1; g.lineWidth = 4; g.beginPath(); g.arc(hx, hy, L.reach + 6, a - 0.22, a + 0.22); g.stroke(); }
     g.globalAlpha = 1;
   }
-  if (run.hard && aimPt && !TOUCH) {                   // Hard mode: where your swing will go
+  if (!run.training && DIFF().aim && aimPt && !TOUCH) {   // Nightmare mode: where your swing will go
     const a = Math.atan2(aimPt.y - hy, aimPt.x - hx);
     g.globalAlpha = 0.28; g.strokeStyle = '#ff6b8a'; g.lineWidth = 5;
     g.beginPath(); g.arc(hx, hy, L.reach + 2, a - HARD_ARC, a + HARD_ARC); g.stroke(); g.globalAlpha = 1;
@@ -3811,9 +3829,9 @@ function render(t){
     }
     g.restore();
   }
-  if (run.hard && !run.training) {
+  if (run.diff && run.diff !== 'normal' && !run.training) {
     g.font = '800 13px Barlow Semi Condensed, sans-serif'; g.textAlign = 'right'; g.textBaseline = 'middle';
-    g.fillStyle = '#ff6b8a'; g.fillText('HARD', W - 14, L.top + (b && !b.dead ? 44 : 14));
+    g.fillStyle = DIFF().color; g.fillText(DIFF().name.toUpperCase(), W - 14, L.top + (b && !b.dead ? 44 : 14));
   }
   if (run.hint && run.floor === 1 && mode === 'play') {
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '700 16px Barlow Semi Condensed, sans-serif';
@@ -3921,7 +3939,7 @@ function updateLobby(dt){
 
 function lobbyInteract(){
   if (mode !== 'lobby' || !lobby.near) return;
-  if (lobby.near.id === 'tower') { if (hardOpen()) { sfx.buy(); openDiff(); } else { sfx.clear(); beginRun(false); } }
+  if (lobby.near.id === 'tower') { sfx.buy(); openDiff(); }
   else if (lobby.near.id === 'sanctum') { sfx.buy(); openSanctum('lobby'); }
   else if (lobby.near.id === 'wardrobe') { sfx.buy(); openCustom(false); }
   else if (lobby.near.id === 'n1' || lobby.near.id === 'n2') { sfx.buy(); openNpc(lobby.near.id); }
@@ -4311,12 +4329,24 @@ function openTitle(){
   devLabel();
 }
 
-function beginRun(hard){ audioInit(); buildSprites(); newRun(); run.hard = !!hard; startFloor(); setPlay(); if (hard) run.bannerText = 'Hard mode'; }
-const HARD_FLOOR = 10;
+function beginRun(diff){
+  audioInit(); buildSprites(); newRun();
+  run.diff = DIFFS[diff] ? diff : 'normal';
+  run.maxHp = run.hp = Math.max(1, Math.round(run.maxHp * DIFF().heroHp));
+  startFloor(); setPlay();
+  if (run.diff !== 'normal' && !run.twist) run.bannerText = DIFF().name + ' mode';   // Nightmare keeps "Floor 1" so its special floor shows
+}
+const HARD_FLOOR = 10, NIGHTMARE_FLOOR = 10;
 const hardOpen = () => meta.dev || (meta.best || 0) >= HARD_FLOOR;
+const nightmareOpen = () => meta.dev || (meta.bestHard || 0) >= NIGHTMARE_FLOOR;
 function openDiff(){
   mode = 'diff';
-  $('diff-hard-best').textContent = meta.bestHard ? 'Best on Hard: floor ' + meta.bestHard : 'Not tried yet';
+  const best = (k, name) => meta[k] ? 'Best on ' + name + ': floor ' + meta[k] : 'Not tried yet';
+  $('diff-easy-best').textContent = best('bestEasy', 'Easy');
+  $('btn-diff-hard').disabled = !hardOpen();
+  $('diff-hard-best').textContent = hardOpen() ? best('bestHard', 'Hard') : 'Locked: reach floor ' + HARD_FLOOR + ' on Normal';
+  $('btn-diff-nightmare').disabled = !nightmareOpen();
+  $('diff-nightmare-best').textContent = nightmareOpen() ? best('bestNightmare', 'Nightmare') : 'Locked: reach floor ' + NIGHTMARE_FLOOR + ' on Hard';
   show('s-diff');
 }
 function openLobby(atDoor, keep){
@@ -4912,7 +4942,7 @@ function rollDoor(){
   const next = run.floor + 1;
   if (run.doorFor === next) return;
   run.doorFor = next;
-  run.doorTwist = next >= 3 && !isBossFloor(next) && !run.training ? pick(TWISTS.filter(t => t.id !== run.lastTwist)).id : null;
+  run.doorTwist = next >= 3 && !isBossFloor(next) && !run.training && !DIFF().twists ? pick(TWISTS.filter(t => t.id !== run.lastTwist)).id : null;
 }
 function renderDoors(){
   rollDoor();
@@ -4983,15 +5013,16 @@ function die(){
   if (run.over) return;
   run.over = true; mode = 'dying'; run.press = null;
   const s = run.stats;
-  const embers = Math.round((3 + s.cleared * 3 + s.bosses * 10 + Math.floor(s.perfects / 4) + Math.floor(s.supers / 2)) * (run.hard ? 1.5 : 1));
-  if (run.hard) meta.bestHard = Math.max(meta.bestHard || 0, s.cleared);
+  const embers = Math.round((3 + s.cleared * 3 + s.bosses * 10 + Math.floor(s.perfects / 4) + Math.floor(s.supers / 2)) * DIFF().reward);
+  const bestKey = { easy:'bestEasy', hard:'bestHard', nightmare:'bestNightmare' }[run.diff];
+  if (bestKey) meta[bestKey] = Math.max(meta[bestKey] || 0, s.cleared);
   run.earned = embers;
   run.gemsEarned = s.bosses + (run.bonusGems || 0);  // one gem per boss beaten, plus elites and twist rewards
   meta.gems = (meta.gems || 0) + run.gemsEarned;
   meta.embers += embers; meta.best = Math.max(meta.best, s.cleared); saveMeta();
   s.floorReached = run.floor;
   recordRunForQuests(s);
-  run.xpGained = Math.round(runXp(s) * (run.hard ? 1.5 : 1));
+  run.xpGained = Math.round(runXp(s) * DIFF().reward);
   run.levelUp = grantXp(run.xpGained);
   // your class levels up with you
   const cid = run.cls; meta.classes[cid] = meta.classes[cid] || { xp:0 };
@@ -5027,7 +5058,7 @@ function killerInfo(){
 function showDeath(){
   mode = 'death'; hud(false);
   const s = run.stats;
-  $('death-title').textContent = heroName() + ' fell on floor ' + run.floor + (run.hard ? ' (Hard)' : '');
+  $('death-title').textContent = heroName() + ' fell on floor ' + run.floor + (run.diff && run.diff !== 'normal' ? ' (' + DIFF().name + ')' : '');
   $('d-floor').textContent = s.cleared;
   $('d-perfect').textContent = s.perfects;
   $('d-super').textContent = s.supers;
@@ -5446,7 +5477,7 @@ canvas.addEventListener('pointerdown', ev => {
 let swallowClickUntil = 0;
 document.addEventListener('click', e => { if (performance.now() < swallowClickUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
 canvas.addEventListener('pointermove', ev => {
-  if (ev.pointerType === 'mouse') aimPt = canvasPt(ev);        // Hard mode on PC: keys aim at the mouse
+  if (ev.pointerType === 'mouse') aimPt = canvasPt(ev);        // Nightmare mode on PC: keys aim at the mouse
   if (!stick.active || ev.pointerId !== stick.id) return;
   const q = canvasPt(ev), R = L.pad.r;
   let dx = (q.x - stick.ox) / R, dy = (q.y - stick.oy) / R;
@@ -5562,8 +5593,10 @@ $('btn-sum-ok').onclick = closeSummon;
 $('btn-cls-dev').onclick = () => { for (const id of CLASS_ORDER) if (!ownsClass(id)) meta.classes[id] = { xp:0 }; for (const id of CLASS_ORDER) meta.classes[id].xp = Math.max(meta.classes[id].xp, CLASS_XP[4]); saveMeta(); toast('Every class unlocked at level 5'); renderClasses(); };
 $('btn-death-sanctum').onclick = () => openSanctum('death');
 $('btn-death-again').onclick = () => openLobby(true);
-$('btn-diff-normal').onclick = () => { sfx.clear(); beginRun(false); };
-$('btn-diff-hard').onclick = () => { sfx.clear(); beginRun(true); };
+$('btn-diff-easy').onclick = () => { sfx.clear(); beginRun('easy'); };
+$('btn-diff-normal').onclick = () => { sfx.clear(); beginRun('normal'); };
+$('btn-diff-hard').onclick = () => { if (!hardOpen()) return; sfx.clear(); beginRun('hard'); };
+$('btn-diff-nightmare').onclick = () => { if (!nightmareOpen()) return; sfx.clear(); beginRun('nightmare'); };
 $('btn-diff-cancel').onclick = () => { mode = 'lobby'; show(); };
 
 function resize(){ layout(); buildSprites(); buildBg(); buildLobbyBg(); }

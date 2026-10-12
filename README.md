@@ -2,6 +2,9 @@
 
 The whole game is one file, `index.html`. Open it in a browser to play.
 
+The story and campaign plan (chapters, bosses, endings) is in
+[`docs/STORY.md`](docs/STORY.md).
+
 ## Tests
 
 Every push to GitHub runs the tests automatically (the **Actions** tab shows the

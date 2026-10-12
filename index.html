@@ -1642,6 +1642,9 @@ let meta = freshMeta();
 // Two save profiles: your real progress, and a dev sandbox with infinite currencies.
 // The sandbox is its own save, so nothing you do in dev mode touches your real one.
 const DEV_KEY = 'parry-keep-dev-v1', PROFILE_KEY = 'parry-keep-profile', BANK = 999999;
+// the dev mode buttons stay hidden until the title logo is tapped 5 times quickly
+const DEV_UNLOCK_KEY = 'parry-keep-dev-unlocked';
+function devUnlocked(){ if (meta && meta.dev) return true; try { return localStorage.getItem(DEV_UNLOCK_KEY) === '1'; } catch(e) { return false; } }
 let profile = 'real';
 const keyFor = p => p === 'dev' ? DEV_KEY : SLOT_KEYS[slot];
 function readSave(key){ return readSaveWithRecovery(key); }
@@ -6115,7 +6118,7 @@ function returnToTitle(){
   $('btn-dev').hidden = true;
 }
 function openTitle(){
-  $('btn-title-resume').hidden = !hasSavedRun(); $('btn-dev').hidden = false;
+  $('btn-title-resume').hidden = !hasSavedRun(); $('btn-dev').hidden = !devUnlocked();
   run = null; mode = 'title'; hud(false); show('s-title');
   devLabel();
 }
@@ -6971,7 +6974,7 @@ function pause(){
   $('btn-dev-illusionist').hidden = !meta.dev || run.training;
   $('btn-dev-necro').hidden=$('btn-dev-pyro').hidden=!meta.dev||run.training||run.practice;
   devLabel();
-  $('btn-dev2').hidden=!!run.practice;
+  $('btn-dev2').hidden=!!run.practice||!devUnlocked();
   for(const id of ['btn-devskip','btn-dev-warden','btn-dev-illusionist'])if(run.practice)$(id).hidden=true;
   $('practice-pause-retry').hidden=!run.practice;
   show('s-pause');
@@ -8203,6 +8206,16 @@ function toggleDev(){
   else if (mode === 'title') openTitle();
 }
 $('btn-dev').onclick = toggleDev;
+let logoTaps = [];
+document.querySelector('#s-title .logo').addEventListener('click', () => {
+  const now = Date.now(); logoTaps = logoTaps.filter(t => now - t < 2500).concat(now);
+  if (logoTaps.length < 5 || mode !== 'title') return;
+  logoTaps = [];
+  if (meta.dev) { toast('Turn dev mode off first'); return; }
+  const on = !devUnlocked();
+  try { if (on) localStorage.setItem(DEV_UNLOCK_KEY, '1'); else localStorage.removeItem(DEV_UNLOCK_KEY); } catch(e) {}
+  $('btn-dev').hidden = !devUnlocked(); toast(on ? 'Developer tools unlocked' : 'Developer tools hidden');
+});
 $('btn-retry-save').onclick = saveMeta;
 $('inv-filter').onchange=e=>{gearFilter=e.target.value;renderInv();};
 $('btn-set-effects').onclick=()=>{meta.effects=meta.effects==='full'?'reduced':'full';saveMeta();openSettings(settingsFrom);};

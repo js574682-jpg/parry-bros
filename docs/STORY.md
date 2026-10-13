@@ -60,6 +60,13 @@ You climb the Tower pursuing your brother.
 
 ### The Orc King (floor 50)
 
+- **Decided: his weapon is a hammer.** The hand that's cut off at the end of phase 2 is
+  the hammer hand. The severed hand and the hammer land at the side of the arena and
+  stay there through phase 3. In the ending he picks the hammer back up and uses it
+  for the blow that knocks you off the Tower.
+- **Decided: phase changes.** Phase 1 runs from full health to 70%, phase 2 from 70%
+  to 35%, and phase 3 from 35% to the end.
+
 **Phase 1: Masked.** (Decided)
 - He wears his cult mask and fights as a fairly basic boss.
 - A short cutscene ends the phase: his mask falls off, he gets angry, and his
@@ -95,7 +102,8 @@ You climb the Tower pursuing your brother.
 - **Decided:** A timed-tap sequence where you take out his sight eye.
 - **Decided:** The lieutenant comes back, and you kill him for good.
 - **Decided:** That distracts you, so the King retaliates and sends you flying
-  through the Tower wall. You fall into Hell. The King survives.
+  through the Tower wall with his hammer, grabbed from where it fell at the side
+  of the arena. You fall into Hell. The King survives.
 - **Open:** the exact order. One reading is: eye → lieutenant attacks → you
   kill him → the King strikes. Confirm before building it.
 - **Decided:** The win has to feel rewarding before the fall.
@@ -105,10 +113,9 @@ You climb the Tower pursuing your brother.
     at the start of Chapter 2, or on a screen after the cutscene.
 
 **Still open for the King:**
-- His finished look and his weapon (and what happens to the weapon when he
-  loses the arm).
-- His health and the health levels where each phase ends.
-- Every individual move.
+- His finished look.
+- His health (the phase-change points are decided: 70% and 35%).
+- Every individual move, including phase 1's hammer attacks.
 - The rewards.
 - The timed-tap tuning: how many taps, how wide the window is, how much he
   heals on a miss, and whether Easy or Nightmare change it.

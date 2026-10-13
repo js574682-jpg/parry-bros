@@ -69,6 +69,14 @@ You climb the Tower pursuing your brother.
 
 **Phase 1: Masked.** (Decided)
 - He wears his cult mask and fights as a fairly basic boss.
+- **Decided: his attacks.** They should feel faster and more aggressive than the
+  Iron Warden's slow single slams (the Warden also uses a hammer):
+  1. **Hammer combo:** 2–3 quick swings in a row from alternating sides; parry each.
+  2. **Hammer throw:** he throws the hammer, it spins at you and flies back to his
+     hand; parry it going out and again coming back. It hints at the hammer
+     leaving his hand later.
+  3. **Charge:** he rushes you with the hammer raised; parry him as he arrives to
+     stagger him.
 - A short cutscene ends the phase: his mask falls off, he gets angry, and his
   special eyes are revealed.
 
@@ -113,9 +121,11 @@ You climb the Tower pursuing your brother.
     at the start of Chapter 2, or on a screen after the cutscene.
 
 **Still open for the King:**
-- His finished look.
-- His health (the phase-change points are decided: 70% and 35%).
-- Every individual move, including phase 1's hammer attacks.
+- His finished look. Until then he uses a placeholder; the creator will supply
+  the art later.
+- His health (the phase-change points are decided: 70% and 35%). Plan: a bit
+  above the floor-40 Necromancer, tuned after playtesting.
+- Every move after phase 1.
 - The rewards.
 - The timed-tap tuning: how many taps, how wide the window is, how much he
   heals on a miss, and whether Easy or Nightmare change it.

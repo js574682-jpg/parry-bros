@@ -114,11 +114,11 @@ export async function regressions() {
 
   // ---- Chapter 1 ending, QTEs and cutscenes ----
 
-  await check('The Masked Wraith fights on floor 25 only, not floor 50', async () => {
+  await check('The Masked Wraith fights on floor 25; floor 50 is the Orc King', async () => {
     const g = await fresh();
     await g.run("useSlot(0); meta.tutDone=true; beginRun();");
     expect(await g.run("storyBossForFloor(25)?.kind"), 'wraith', 'floor 25 boss');
-    expect(await g.run("storyBossForFloor(50)?.kind ?? null"), null, 'floor 50 story boss');
+    expect(await g.run("storyBossForFloor(50)?.kind ?? null"), 'king', 'floor 50 story boss');
     await g.context.close();
   });
 
@@ -191,6 +191,60 @@ export async function regressions() {
     await g.run("window.__mash=null; startQte('test-mash'); run.qte.ready=0;");
     await g.page.waitForTimeout(1900);
     expect(await g.page.evaluate(() => window.__mash), false, 'mash timeout');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  // ---- The Orc King, phase 1 ----
+
+  const kingFloor = "useSlot(0); meta.tutDone=true; meta.seen=meta.seen||{}; meta.seen['boss:The Orc King']=true; beginRun(); run.floor=50; startFloor(); setPlay(); run.boss.state='idle'; run.boss.y=L.bossY; run.boss.timer=.3; run.enemies=[]; run.spawnQueue=[];";
+
+  await check('The Orc King fights on floor 50', async () => {
+    const g = await fresh();
+    await g.run(kingFloor);
+    expect(await g.run('run.boss.def.kind'), 'king', 'floor 50 boss');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('King phase 1: combos, throws and charges run, and parrying the charge staggers him', async () => {
+    const g = await fresh(DESKTOP);
+    await g.run(kingFloor + " run.boss.hp=run.boss.maxHp=1e9; run.aegis=1e9; window.__stag=0; kingChargeParried=(f=>(b,p)=>{ if(b.state==='kcharge') window.__stag++; return f(b,p); })(kingChargeParried);");
+    await g.page.waitForTimeout(16000);
+    const k = await g.run("JSON.stringify({cycle:run.boss.king.cycle, hammer:run.boss.king.hammer})");
+    if (JSON.parse(k).cycle < 4) throw new Error('fewer than 4 attacks in 16s: ' + k);
+    if (!(await g.page.evaluate(() => window.__stag))) throw new Error('a parried charge never staggered him');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('King phase 1 attacks hurt when not parried', async () => {
+    const g = await fresh(DESKTOP);
+    await g.run(kingFloor + " run.boss.hp=run.boss.maxHp=1e9; run.hp=run.maxHp=1e6;");
+    await g.page.waitForTimeout(12000);
+    if (await g.run('run.hp') >= 1e6) throw new Error('no King attack landed in 12s');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('At 70% the King is unmasked in a cutscene, then the fight resumes', async () => {
+    const g = await fresh();
+    await g.run(kingFloor + " run.boss.hp=run.boss.maxHp*.72; damageBoss(run.boss.maxHp*.2);");
+    expect(await g.run('mode'), 'cutscene', 'mode after crossing 70%');
+    expect(await g.run('Math.round(run.boss.hp/run.boss.maxHp*100)'), 70, 'boss held at 70%');
+    expect(await g.run('run.boss.king.unmasked'), true, 'unmasked');
+    for (let i = 0; i < 3; i++) { await g.page.waitForTimeout(700); await g.page.mouse.click(200, 400); }
+    expect(await g.run('mode'), 'play', 'fight resumes');
+    await g.page.waitForTimeout(3000);
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('Beating the King finishes Chapter 1', async () => {
+    const g = await fresh();
+    await g.run(kingFloor + " noFile=false; run.boss.king.unmasked=true; run.boss.hp=1; damageBoss(50);");
+    await g.page.waitForTimeout(3000);
+    expect(await g.run('mode'), 'cutscene', 'chapter-complete cutscene after the King falls');
     expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
     await g.context.close();
   });

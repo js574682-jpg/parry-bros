@@ -1462,11 +1462,13 @@ const BOSSES = [
   { name:'The Three Sisters', color:'#e05aa0', hp:560, kind:'sisters', escorts:0,
     intro:'Three sisters, one life bar. The Blade rushes in and slashes, the Bow shoots from far away, and the Storm marks circles on the floor. You can’t parry the circles: walk out of them. At half health they start attacking together.' },
 ];
-// floor 25 (and every 25th floor after it) always brings the Wraith; the other bosses share the rest
+// floor 25 brings the Wraith and floor 50 the Orc King; the other bosses share the rest
 const WRAITH_FLOOR = 25;
-const CHAPTER_FLOORS = 50;   // clearing this floor ends the chapter (the Orc King will fight here)
+const CHAPTER_FLOORS = 50;   // the Orc King's floor; clearing it ends the chapter
 BOSSES.push({ name:'The Masked Wraith', color:'#c8b8ff', hp:560, kind:'wraith', escorts:0, fixed:true,
   intro:'It mixes knife volleys with marked dash combos. Parry each dash or step off its line. Only parrying the final dash creates a stun opening. As its mask cracks, it gets faster and its combos get longer.' });
+BOSSES.push({ name:'The Orc King', color:'#d9944a', hp:1300, kind:'king', escorts:0, fixed:true,
+  intro:'He swings his hammer in quick combos: parry every swing. When he throws the hammer, parry it, then turn around: it swings back at you from the far side of the arena. When he marks a line and charges, parry him as he arrives to stagger him.' });
 const SISTERS = [
   { role:'blade', name:'Blade', color:'#ff5a7a' },
   { role:'bow',   name:'Bow',   color:'#5fb3ff' },
@@ -1475,6 +1477,7 @@ const SISTERS = [
 const BOSS_TIPS = {
   'The Necromancer':['Each risen boss breaks one lantern. Only the active risen body takes damage until all three seals break.','Red grave hands lock their position before erupting. Move out of the circle.','A missed Grave Recall skull charges at the rim before returning along its marked line.','The last phase calls one spirit at a time: heavy hammer wave, illusion volley or a marked dash.'],
   'The Pyromaniac':['Red floor marks cannot be parried. Move before they catch fire.','Golden fireballs remain parryable, even during his floor attacks.','At half health, tap three times when the cursor reaches gold. Missing heals him 8%, then you can retry.'],
+  'The Orc King':['Every swing in a hammer combo is its own attack: parry each one.','After a hammer throw, turn around. It swings back at you from the far side of the arena.','Parry his charge as he arrives to stagger him and open a big window.'],
   'The Iron Warden':['Perfect the heavy ground wave to counter. A normal parry only blocks half.','The hammer hanging overhead means a delayed slam. Wait for the wave itself.','Below 35% HP, expect four slams. Match each wave instead of tapping wildly.'],
   'The Illusionist':['Red shots are real. Blue dashed shots are harmless and never take priority over a real attack.','Move into the unpainted third before the arena fractures. That blast cannot be parried.','The surrounding copies are illusions. Their real red shots can still be reflected back to the true boss.'],
   'The Bell Tyrant':  ['The Bell Tyrant rings before every attack. The direction arrows around you show where each shot comes from.',
@@ -1879,7 +1882,7 @@ const minionHome = i => { const p = { x:HX() + Math.cos(MINION_ANG[i]) * L.orbit
 
 /* scaling */
 const hpMul   = f => Math.pow(1.19,Math.min(24,f-1))*Math.pow(1.12,Math.max(0,f-25))*(run&&!run.training?DIFF().enemyHp:1);
-const bossHealth=(def,f)=>def.hp*hpMul(f)*({illusionist:1.5,wraith:2,pyromaniac:1.3,necromancer:1.35}[def.kind]||1);
+const bossHealth=(def,f)=>def.hp*hpMul(f)*({illusionist:1.5,wraith:2,pyromaniac:1.3,necromancer:1.35,king:1.35}[def.kind]||1);
 const dmgMul  = f => Math.pow(1.085,Math.min(19,f-1))*Math.pow(1.025,Math.max(0,f-20));
 const spdMul  = f => Math.min(1.7, 1 + 0.028 * (f - 1));
 const intMul  = f => Math.max(0.62, 1 - 0.022 * (f - 1));
@@ -2042,6 +2045,7 @@ function startFloor(){
     if (def.kind === 'ringer') run.boss.ring = { bars:[], n:0, beatKey:-1, hitT:9, heavyHit:false };
     if (def.kind === 'sisters') initSisters(run.boss);
     if (def.kind === 'wraith') run.boss.wr = { cycle:0, fx:0, fy:0, tx:0, ty:0, t:0, dur:0, ghostT:0, ghosts:[], chain:0 };
+    if (def.kind === 'king') run.boss.king = kingInit();
     const escorts = def.escorts != null ? def.escorts : 2 + Math.floor(f / 10);
     for (let i = 0; i < escorts; i++) q.push(i % 2 ? 'archer' : 'imp');
   } else {
@@ -2059,7 +2063,7 @@ function startFloor(){
 
 // the in-between bosses come from a shuffled pool: you see every one before any repeats
 function storyBossForFloor(f){
-  const kind = f === 10 ? 'warden' : f === 20 ? 'illusionist' : f === 30 ? 'pyromaniac' : f === 40 ? 'necromancer' : f === WRAITH_FLOOR && !run.training ? 'wraith' : null;
+  const kind = f === 10 ? 'warden' : f === 20 ? 'illusionist' : f === 30 ? 'pyromaniac' : f === 40 ? 'necromancer' : f === CHAPTER_FLOORS ? 'king' : f === WRAITH_FLOOR && !run.training ? 'wraith' : null;
   return kind ? BOSSES.find(b => b.kind === kind) : null;
 }
 function nextBoss(){
@@ -2461,6 +2465,7 @@ function updateBoss(dt, frozen){
   if (b.def.kind === 'warden' || b.def.kind === 'illusionist') { updateStoryBoss(b,dt); return; }
   if (b.def.kind === 'ringer') { updateRinger(b, dt); return; }
   if (b.def.kind === 'wraith') { updateWraith(b, dt); return; }
+  if (b.def.kind === 'king') { updateKing(b, dt); return; }
   b.x = W / 2 + Math.sin(b.bob * 0.4) * Math.min(70, W * 0.16);
   b.y = L.bossY + Math.sin(b.bob) * 3;
   if (b.state === 'idle') {
@@ -2675,6 +2680,7 @@ function parryWraithCrosscut(p, perfect, mul){
   p.dead = true;
   const b = run.boss; if (!b || b.dead) return;
   damageBoss(swordDmg() * (perfect ? 3 : 1.2) * (mul || 1), true);
+  if (p.kingCharge) { kingChargeParried(b, perfect); return; }
   if (p.final && !b.dead) {
     b.wr.crossLeft = 0; b.state = 'crossrecover'; b.timer = perfect ? 1.1 : 0.6;
     floatText(b.x, b.y - 42, 'OPENING!', '#ffd84a', 18, true);
@@ -2713,6 +2719,176 @@ function updateWraith(b, dt){
   }
   updateWraithKnives(b,dt);
 }
+/* ================= THE ORC KING (floor 50) ================= */
+// Phase 1 (full health to 70%): masked, three hammer attacks (see docs/STORY.md).
+//   combo:  2 quick swings from alternating sides, 3 once he's below 85%. Parry each one.
+//   throw:  the hammer flies at you; once that's dealt with, it swings back from the far side.
+//   charge: a marked rush across the arena. Parrying him as he arrives staggers him.
+// At 70% the mask falls (a short cutscene). Phases 2 and 3 aren't built yet, so for now he keeps
+// his phase 1 attacks after that.
+const KING_UNMASK_AT = .7, KING_ARM_AT = .35;
+const KING_ATTACKS = ['combo','throw','combo','charge'];
+function kingInit(){ return { cycle:0, attack:null, left:0, side:1, hammer:'hand', shot:null, charge:null, pose:0, unmasked:false, cx:0, cy:0, dist:0, len:0 }; }
+function kingState(b){ return b.king || (b.king = kingInit()); }
+function kingPressure(b){ return 1 + 0.25 * clamp((1 - b.hp / b.maxHp) / (1 - KING_UNMASK_AT), 0, 1); }   // quicker as phase 1 wears on
+function beginKingAttack(b){
+  const k = kingState(b);
+  k.attack = KING_ATTACKS[k.cycle++ % KING_ATTACKS.length];
+  floatText(b.x, b.y - 72, { combo:'HAMMER COMBO', throw:'HAMMER THROW', charge:'CHARGE' }[k.attack], '#f2b56b', 16, true); sfx.bell();
+  if (k.attack === 'charge') { aimLance(b); b.state = 'kchargewind'; b.windupT = b.windupMax = 0.85 / kingPressure(b); return; }
+  b.state = 'kwind'; b.windupT = b.windupMax = (k.attack === 'throw' ? 0.8 : 0.6) / kingPressure(b);
+}
+function kingSwing(b){
+  const k = kingState(b);
+  fireShot('slash', b.x + k.side * 46 * L.scale, b.y + 30, 'boss', 12, '#f2b56b', 0.8 / kingPressure(b), null, { steady:true });
+  k.side = -k.side; k.pose = 0.22; run.shake = Math.max(run.shake, 2); sfx.whoosh();
+}
+function kingThrow(b, back){
+  const k = kingState(b);
+  let fx = b.x, fy = b.y + 20;
+  if (back) {                                          // it swings round and comes at you from the far side
+    const a = Math.atan2(HY() - b.y, HX() - b.x);
+    fx = L.cx + Math.cos(a) * L.rx * 0.95; fy = L.cy + Math.sin(a) * L.ry * 0.95;
+  }
+  const p = fireShot('orb', fx, fy, 'boss', 14, '#d9a35c', back ? 1.05 : 0.95, null, { steady:true });
+  p.hammer = true; p.size = 12;
+  k.shot = p; k.hammer = back ? 'returning' : 'thrown'; k.pose = 0.3; sfx.whoosh();
+}
+const kingShotDone = s => !s || s.dead || s.reflected || s.deflected;
+function launchKingCharge(b){
+  const k = kingState(b), speed = 560 * kingPressure(b), dx = Math.cos(b.lanceDir), dy = Math.sin(b.lanceDir);
+  k.cx = b.x; k.cy = b.y; k.dist = 0; k.len = b.lanceLen;
+  const p = { kind:'dash', wraithDash:true, kingCharge:true, final:true, from:'boss', x:b.x, y:b.y, vx:dx * speed, vy:dy * speed,
+    v:speed, cr:40, size:14, ang:Math.atan2(b.y - HY(), b.x - HX()), dmg:16 * dmgMul(run.floor), color:b.def.color,
+    lance:{ dx, dy }, dead:false, age:0, spin:0 };
+  k.charge = p; run.eproj.push(p); b.state = 'kcharge'; sfx.whoosh();
+}
+function stepKingCharge(b, dt){
+  const k = kingState(b), p = k.charge;
+  if (!p) { b.state = 'kreturn'; return; }
+  const before = k.dist;
+  k.dist = Math.min(k.len, k.dist + p.v * dt);
+  b.x = k.cx + p.lance.dx * k.dist; b.y = k.cy + p.lance.dy * k.dist;
+  p.x = b.x; p.y = b.y; p.ang = Math.atan2(p.y - HY(), p.x - HX());
+  if (!p.dead) {                                       // swept contact, like the Wraith's dashes
+    const rx = HX() - k.cx, ry = HY() - k.cy;
+    const along = rx * p.lance.dx + ry * p.lance.dy, perp = Math.abs(rx * p.lance.dy - ry * p.lance.dx);
+    if (perp <= p.cr && along + p.cr >= before && along - p.cr <= k.dist) {
+      if (run.aegis > 0) autoParry(p);
+      else { p.dead = true; strike(p, p.dmg, false); }
+    }
+  }
+  if (b.state !== 'kcharge' || b.dead) return;         // a parry staggers him mid-charge
+  if (k.dist >= k.len) { p.dead = true; k.charge = null; b.state = 'kreturn'; }
+}
+function kingChargeParried(b, perfect){
+  const k = kingState(b); k.charge = null;
+  if (!b || b.dead || b.state !== 'kcharge') return;    // e.g. the hit just unmasked him
+  b.state = 'kstagger'; b.timer = perfect ? 1.6 : 1.0;
+  floatText(b.x, b.y - 46, 'STAGGERED!', '#ffd84a', 18, true); run.shake = Math.max(run.shake, 6);
+}
+function updateKing(b, dt){
+  const k = kingState(b); k.pose = Math.max(0, k.pose - dt);
+  if (b.state === 'kcharge') { stepKingCharge(b, dt); return; }
+  if (b.state === 'kchargewind') { b.windupT -= dt; if (b.windupT <= 0) launchKingCharge(b); return; }
+  if (b.state === 'kstagger') { b.timer -= dt; if (b.timer <= 0) b.state = 'kreturn'; return; }
+  const hx = L.cx + Math.sin(b.bob * 0.35) * Math.min(40, W * 0.08), hy = L.bossY;   // his spot at the top
+  const ease = 1 - Math.pow(b.state === 'kreturn' ? 0.03 : 0.2, dt);
+  b.x = lerp(b.x, hx, ease); b.y = lerp(b.y, hy, ease);
+  if (b.state === 'kreturn') { if (Math.hypot(b.x - hx, b.y - hy) < 8) { b.state = 'idle'; b.timer = 0.5; } return; }
+  if (b.state === 'idle') { b.timer -= dt; if (b.timer <= 0) beginKingAttack(b); return; }
+  if (b.state === 'kwind') {
+    b.windupT -= dt; if (b.windupT > 0) return;
+    if (k.attack === 'combo') { k.left = b.hp / b.maxHp > 0.85 ? 2 : 3; b.state = 'kcombo'; b.timer = 0; }
+    else { kingThrow(b, false); b.state = 'kthrow'; }
+    return;
+  }
+  if (b.state === 'kcombo') {
+    b.timer -= dt; if (b.timer > 0) return;
+    if (k.left > 0) { kingSwing(b); k.left--; b.timer = 0.42 / kingPressure(b); }
+    else { b.state = 'idle'; b.timer = 1.1 / kingPressure(b); }
+    return;
+  }
+  if (b.state === 'kthrow') {
+    if (k.hammer === 'thrown' && kingShotDone(k.shot)) { k.shot = null; k.hammer = 'circling'; b.timer = 0.4; }
+    else if (k.hammer === 'circling') { b.timer -= dt; if (b.timer <= 0) kingThrow(b, true); }
+    else if (k.hammer === 'returning' && kingShotDone(k.shot)) { k.shot = null; k.hammer = 'hand'; b.state = 'idle'; b.timer = 1.0 / kingPressure(b); }
+    else if (k.hammer === 'hand') { b.state = 'idle'; b.timer = 0.6; }
+  }
+}
+function kingUnmask(b){
+  const k = kingState(b);
+  k.unmasked = true; k.hammer = 'hand'; k.shot = null; k.charge = null;
+  if (run.over) return;                                // you fell in the same moment: no cutscene over the death screen
+  run.eproj = []; run.fproj = []; run.pending = []; run.press = null; run.cleave = null; run.deadeye = null;
+  b.state = 'kreturn'; b.timer = 0;
+  playCutscene('king-unmask', () => {
+    if (!run || run.over) return;
+    setPlay(); run.banner = 1.6; run.bannerText = 'Unmasked'; run.iframes = Math.max(run.iframes, 1);
+  });
+}
+// Placeholder look until the real art exists: a cloaked figure, a cult mask (or bare face and glowing
+// eyes once it falls) and a hammer. o.maskFall (0→1) and o.eyes (0→1) animate the unmask cutscene.
+function drawKing(g, b, t, o = {}){
+  const k = b.king || kingInit(), u = k.unmasked || o.maskFall >= 1;
+  const x = Math.round(b.x), y = Math.round(b.y + Math.sin(b.bob || 0) * 2);
+  const lean = b.state === 'kcharge' ? 6 : b.state === 'kstagger' ? -5 : 0, shake = o.shake ? Math.sin(t * 60) * 2 : 0;
+  g.save(); g.translate(x + shake, y); g.rotate(lean * Math.PI / 180);
+  if (b.flash > 0.5) g.filter = 'brightness(2.4)';
+  glow(g, 0, 0, 70, b.def ? b.def.color : '#d9944a', 0.18 + (b.state === 'kwind' || b.state === 'kchargewind' ? 0.25 : 0));
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(0, 44, 34, 8, 0, 0, Math.PI * 2); g.fill();
+  // cloak and shoulders
+  g.fillStyle = '#120d18'; g.beginPath(); g.moveTo(-36, 44); g.lineTo(-30, -6); g.lineTo(-20, -18); g.lineTo(20, -18); g.lineTo(30, -6); g.lineTo(36, 44); g.closePath(); g.fill();
+  g.fillStyle = '#3b2340'; g.beginPath(); g.moveTo(-32, 42); g.lineTo(-27, -4); g.lineTo(-18, -15); g.lineTo(18, -15); g.lineTo(27, -4); g.lineTo(32, 42); g.closePath(); g.fill();
+  g.fillStyle = '#56315b'; g.fillRect(-4, -14, 8, 54);
+  g.fillStyle = '#5f6b49'; g.fillRect(-40, -8, 10, 22); g.fillRect(30, -8, 10, 22);   // arms
+  // head
+  g.fillStyle = '#120d18'; g.fillRect(-15, -44, 30, 28);
+  g.fillStyle = '#6f8a5a'; g.fillRect(-13, -42, 26, 25);
+  g.fillStyle = '#e8dcc0'; g.fillRect(-11, -24, 4, 6); g.fillRect(7, -24, 4, 6);   // tusks
+  if (!u) {
+    const fall = clamp(o.maskFall || 0, 0, 1), my = fall * fall * 90, mr = fall * 0.9;
+    g.save(); g.translate(0, -31 + my); g.rotate(mr);
+    g.fillStyle = '#0d0a10'; g.fillRect(-15, -14, 30, 25);
+    g.fillStyle = '#e8dcc0'; g.fillRect(-13, -12, 26, 21);
+    g.fillStyle = '#9c8f74'; g.fillRect(-13, 5, 26, 4);
+    g.fillStyle = '#1a1020'; g.fillRect(-9, -5, 6, 3); g.fillRect(3, -5, 6, 3); g.fillRect(-1, 0, 2, 6);
+    if (o.crack) { g.fillStyle = '#1a1020'; g.fillRect(-2, -12, 2, 6 * o.crack); g.fillRect(0, -7, 5 * o.crack, 2); }
+    g.restore();
+  }
+  if (u || (o.maskFall || 0) > 0.3) {                  // his eyes: one for each power (see docs/STORY.md)
+    const e = u ? (o.eyes == null ? 1 : o.eyes) : 0.4;
+    glow(g, -6, -32, 10 + 8 * e, '#7adbff', 0.5 * e); glow(g, 6, -32, 10 + 8 * e, '#ffb347', 0.5 * e);
+    g.fillStyle = '#d7f6ff'; g.fillRect(-9, -34, 6, 4); g.fillStyle = '#ffd38a'; g.fillRect(3, -34, 6, 4);
+  }
+  // the hammer, in his right hand unless it's been thrown
+  if (k.hammer === 'hand') {
+    const swing = k.pose > 0 ? (k.side > 0 ? -1 : 1) * 0.9 : b.state === 'kwind' ? -0.5 : 0.15;
+    g.save(); g.translate(36, 4); g.rotate(swing);
+    g.fillStyle = '#4b3524'; g.fillRect(-3, -46, 6, 52);
+    g.fillStyle = '#0d0a10'; g.fillRect(-15, -60, 30, 20);
+    g.fillStyle = '#8a8f9a'; g.fillRect(-13, -58, 26, 16);
+    g.fillStyle = '#c3c8d2'; g.fillRect(-13, -58, 26, 4);
+    g.restore();
+  }
+  if (b.state === 'kstagger') { g.fillStyle = '#ffd84a'; for (let i = 0; i < 3; i++) { const a = t * 4 + i * 2.1; g.fillRect(Math.cos(a) * 18 - 2, -56 + Math.sin(a) * 5, 4, 4); } }
+  g.restore();
+}
+function drawThrownHammer(g, p){
+  g.save(); g.translate(p.x, p.y); g.rotate(p.age * 14);
+  glow(g, 0, 0, 30, '#f2b56b', 0.35);
+  g.fillStyle = '#4b3524'; g.fillRect(-3, -4, 6, 30);
+  g.fillStyle = '#0d0a10'; g.fillRect(-14, -16, 28, 18);
+  g.fillStyle = '#8a8f9a'; g.fillRect(-12, -14, 24, 14);
+  g.fillStyle = '#c3c8d2'; g.fillRect(-12, -14, 24, 4);
+  g.restore();
+}
+function drawKingCutscene(g, t, o){
+  g.drawImage(bg, 0, 0, W, H);
+  const b = run && run.boss; if (!b || b.def.kind !== 'king') return;
+  drawKing(g, { ...b, x:L.cx, y:L.bossY + 40 * L.scale, state:'idle', flash:0, king:{ ...kingState(b), unmasked:false, hammer:'hand', pose:0 } }, t, o);
+}
+
 function updateWraithKnives(b, dt){
   const w = b.wr, f = run.floor, hurt = !b.revenant && b.hp < b.maxHp * 0.5, tempo = Math.max(0.8, 1 - 0.006 * f) / wraithPressure(b);
   for (const gh of w.ghosts) gh.life -= dt;
@@ -3004,6 +3180,7 @@ function bossIntro(b){
   else if(b.def.kind==='necromancer'){g.save();g.translate(32,37);g.scale(.5,.5);drawNecromancer(g,{...b,x:0,y:0},0);g.restore();}
   else if(b.def.kind==='pyromaniac'){g.save();g.translate(36,36);g.scale(.7,.7);drawPyromaniac(g,{...b,x:0,y:0},0);g.restore();}
   else if (STORY_BOSS_ART[b.def.kind]) { const A=STORY_BOSS_ART[b.def.kind], s=makeSprite(A.idle,1.2,A.pal); g.drawImage(s.cv,(72-s.w)/2,(72-s.h)/2,s.w,s.h); }
+  else if (b.def.kind === 'king') { g.save(); g.translate(36, 44); g.scale(.62, .62); drawKing(g, { ...b, x:0, y:0, flash:0 }, 0); g.restore(); }
   else if (b.def.kind === 'wraith') { const w = makeSprite(WRAITH_PX, 2.7, WRAITH_PAL); g.drawImage(w.cv, (72 - w.w) / 2, (72 - w.h) / 2, w.w, w.h); }
   else { const s = makeSprite(BOSS_PX[b.def.name], 3.4, { o:b.def.color, x:'#1f0f24', y:'#331a3a', e:'#ffd84a', a:b.def.color, z:'#12060f' }); g.drawImage(s.cv, (72 - s.w) / 2, (72 - s.h) / 2, s.w, s.h); }
   sfx.bell();
@@ -3653,6 +3830,7 @@ function damageBoss(dmg, big, byBro, dot=false){
   if(byBro&&dmg>0)b.broAssist=true;
   b.hp -= dmg; if(!dot)markFoeHit(b);
   if(b.def.kind==='pyromaniac'&&!pyroState(b).trialDone&&b.hp<=b.maxHp*.5){b.hp=b.maxHp*.5;beginPyroTrial(b);return;}
+  if(b.def.kind==='king'&&!kingState(b).unmasked&&b.hp<=b.maxHp*KING_UNMASK_AT){b.hp=b.maxHp*KING_UNMASK_AT;kingUnmask(b);return;}
   if (big) floatText(b.x + rand(-40, 40), b.y + 34, Math.ceil(dmg), '#e9fdff', 22, true);
   if (b.hp <= 0) {
     if(b.revenant){defeatRevenant(b);return;}
@@ -4512,6 +4690,7 @@ function drawBoss(g,b,t){drawBossArrival(g,b,t);drawBossModel(g,b,t);drawBossWea
 function drawBossModel(g, b, t){
   if(b.def.kind==='necromancer'){drawNecromancer(g,b,t);return;}
   if(b.def.kind==='pyromaniac'){drawPyromaniac(g,b,t);return;}
+  if(b.def.kind==='king'){drawKing(g,b,t);return;}
   if (!SPR) buildSprites();
   if (STORY_BOSS_ART[b.def.kind]) { drawStoryBoss(g,b,t); return; }
   if (b.def.kind === 'sisters') { drawSisters(g, b, t); return; }
@@ -4724,6 +4903,7 @@ function drawShot(g, p, t){
     return;
   }
   if(p.necroSkull){drawNecroSkull(g,p,t);return;}
+  if(p.hammer){drawThrownHammer(g,p);return;}
   if (p.lob) {                                        // a bomb: red landing circle, fuse sweep, shadow, the bomb
     const b = p.lob, k = clamp(b.t / b.T, 0, 1);
     g.globalAlpha = 0.14 + 0.3 * k; g.fillStyle = '#ff4470';
@@ -5388,7 +5568,7 @@ function rememberEncounter(key){
 function knownEncounters(){
   const known=meta.encounters||{},seen=meta.seen||{};
   const list=Object.keys(ENEMIES).filter(id=>known[id]||seen[id]).map(id=>({key:id,name:ENEMY_INFO[id]?.name||ENEMIES[id].name||id[0].toUpperCase()+id.slice(1),floor:ENEMIES[id].minFloor||1}));
-  for(const b of BOSSES)if(known['boss:'+b.name]||seen['boss:'+b.name]||meta.firstBossStones[b.kind])list.push({key:'boss:'+b.name,name:b.name,floor:({warden:10,illusionist:20,wraith:25,pyromaniac:30,necromancer:40})[b.kind]||5,boss:b});
+  for(const b of BOSSES)if(known['boss:'+b.name]||seen['boss:'+b.name]||meta.firstBossStones[b.kind])list.push({key:'boss:'+b.name,name:b.name,floor:({warden:10,illusionist:20,wraith:25,pyromaniac:30,necromancer:40,king:50})[b.kind]||5,boss:b});
   return list;
 }
 function openPractice(){
@@ -5406,13 +5586,14 @@ function practiceSelection(){
   $('practice-floor').value=String(e.floor);
   $('practice-floor').max=String(Math.max(e.floor,meta.best||1));
   $('practice-level').value=String(1+Math.floor((e.floor-1)/3));
-  $('practice-phase').disabled=!e.boss;
+  $('practice-phase').disabled=!e.boss||e.boss.kind==='king';   // the King's later phases aren't built yet
+  if(e.boss?.kind==='king')$('practice-phase').value='1';
 }
 function startPractice(config){
   if(!config){config={key:$('practice-enemy').value,floor:Number($('practice-floor').value),phase:Number($('practice-phase').value),level:Number($('practice-level').value)};}
   const entry=knownEncounters().find(e=>e.key===config.key);
   if(!entry){toast('Encounter this opponent in the tower first.');return false;}
-  config={key:entry.key,floor:clamp(Math.round(config.floor)||entry.floor,1,Math.max(entry.floor,meta.best||1)),phase:entry.boss&&[1,.5,.24].includes(config.phase)?config.phase:1,level:clamp(Math.round(config.level)||1,1,50)};
+  config={key:entry.key,floor:clamp(Math.round(config.floor)||entry.floor,1,Math.max(entry.floor,meta.best||1)),phase:entry.boss&&entry.boss.kind!=='king'&&[1,.5,.24].includes(config.phase)?config.phase:1,level:clamp(Math.round(config.level)||1,1,50)};
   if(!practiceSession)practiceSession={meta,config};
   else{keepPracticeSettings();practiceSession.config=config;}
   meta=normalizeMeta(JSON.parse(JSON.stringify(practiceSession.meta)));gearDirty();
@@ -5426,6 +5607,7 @@ function startPractice(config){
     if(def.kind==='ringer')b.ring={bars:[],n:0,beatKey:-1,hitT:9,heavyHit:false};
     if(def.kind==='sisters'){initSisters(b);b.state='idle';}
     if(def.kind==='wraith')b.wr={cycle:0,fx:0,fy:0,tx:0,ty:0,t:0,dur:0,ghostT:0,ghosts:[],chain:0};
+    if(def.kind==='king')b.king=kingInit();
     if(def.kind==='necromancer')initNecromancer(b,config.phase<1);
     if(def.kind==='pyromaniac'&&config.phase<.5)pyroState(b).trialDone=true;
   }else spawnEnemy(entry.key);
@@ -5607,6 +5789,11 @@ function drawQte(g,t){
 // shot once it has been up for a moment. The Skip button only appears for cutscenes already seen.
 // Each shot: { dur: seconds, title, sub, draw(g, t, k) } where k runs 0→1 over the shot.
 const CUTSCENES = {
+  'king-unmask': { shots:[
+    { dur:1.4, draw:(g,t,k)=>drawKingCutscene(g,t,{ crack:k, shake:true }) },
+    { dur:1.7, sub:'The mask falls', draw:(g,t,k)=>drawKingCutscene(g,t,{ crack:1, maskFall:k }) },
+    { dur:1.7, title:'Unmasked', draw:(g,t,k)=>drawKingCutscene(g,t,{ maskFall:1, eyes:k }) },
+  ] },
   'chapter1-complete': { shots:[
     { dur:3.4, title:'Chapter 1', sub:'The Tower', draw:drawCutsceneEmbers },
     { dur:3.4, title:'Complete', sub:'Floor 50 cleared', draw:drawCutsceneEmbers },
@@ -7943,6 +8130,7 @@ function bossPhaseInfo(b){
   if(b.revenant)return {key:'revenant',label:`RISEN ECHO · ${run.necro?.broken||0} / 3 SEALS BROKEN`,marks:[]};
   if(k==='warden')return {key:hp<.35?'fury':'iron',label:hp<.35?'IRON FURY · FOUR HEAVY SLAMS':'HEAVY BLOWS · PERFECT TO REFLECT',marks:[.35]};
   if(k==='illusionist')return {key:b.story?.enraged?'frenzy':hp<.5?'dark':'tricks',label:b.story?.enraged?'FINAL FRENZY · WATCH THE RED SHOTS':hp<.5?'DARK MAGIC · WATCH THE RED SHOTS':'RED IS REAL · BLUE IS AN ILLUSION',marks:[.5,.25]};
+  if(k==='king')return {key:b.king?.unmasked?'unmasked':'masked',label:b.king?.unmasked?'UNMASKED':'MASKED · PARRY EVERY SWING',marks:[KING_UNMASK_AT,KING_ARM_AT]};
   if(k==='wraith')return {key:hp>.65?'two':hp>.3?'three':'four',label:hp>.65?'TWO DASHES · COUNTER THE FINISHER':hp>.3?'THREE DASHES · COUNTER THE FINISHER':'FOUR DASHES · COUNTER THE FINISHER',marks:[.65,.3]};
   if(k==='pyromaniac')return {key:b.pyro?.trialDone?'inferno':'cinder',label:b.pyro?.trialDone?'INFERNO · BROS PROTECTED':'GOLD: PARRY · RED FLOOR: MOVE',marks:[.5]};
   if(k==='necromancer'){const n=run.necro;return {key:n?.phase==='duel'?(n.enraged?'last':'duel'):'sealed'+(n?.broken||0),label:n?.phase==='duel'?(n.enraged?'LAST RITES · ONE SPIRIT AT A TIME':'SOUL SEALS BROKEN'):`RAISING THE DEAD · ${n?.broken||0} / 3 SEALS BROKEN`,marks:n?.phase==='duel'?[.25]:[]};}
@@ -8021,6 +8209,7 @@ function drawThreatOutlines(g){
       const w=2*L.rx/3;for(let i=0;i<3;i++)if(i!==b.story.safe)threatEdge(g,()=>g.rect(L.cx-L.rx+i*w+2,L.cy-L.ry+2,w-4,2*L.ry-4));
     }
     if(b.def.kind==='ringer')for(const z of b.ring?.dangers||[]){g.save();g.translate(z.x,z.y);g.rotate(z.ang);threatEdge(g,()=>z.kind==='burst'?g.arc(0,0,z.radius,0,Math.PI*2):g.rect(0,-z.width,z.range,2*z.width));g.restore();}
+    if(b.def.kind==='king'&&b.state==='kchargewind'){g.setLineDash([12,6]);threatEdge(g,()=>{g.moveTo(b.x,b.y);g.lineTo(b.x+Math.cos(b.lanceDir)*b.lanceLen,b.y+Math.sin(b.lanceDir)*b.lanceLen);},'#f2b56b');g.setLineDash([]);}
     if(b.def.kind==='wraith'&&b.state==='crosswind'){g.setLineDash([9,7]);threatEdge(g,()=>{g.moveTo(b.x,b.y);g.lineTo(b.x+Math.cos(b.lanceDir)*b.lanceLen,b.y+Math.sin(b.lanceDir)*b.lanceLen);},'#d9c5ff');g.setLineDash([]);}
   }
   for(const h of run.necro?.hands||[])threatEdge(g,()=>g.arc(h.x,h.y,h.r,0,Math.PI*2));

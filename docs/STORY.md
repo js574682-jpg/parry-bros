@@ -231,8 +231,13 @@ Code facts, so plans and code stay in sync:
   - The Pyromaniac's protect-your-bros scene.
   - **Chapter 1 ends at floor 50.** Clearing it plays a placeholder "Chapter 1 /
     Complete" cutscene and a results screen. Clearing it on Hard or Nightmare
-    unlocks the One-Eyed. Progress is kept in `meta.chapters`. Until the Orc King
-    exists, floor 50 uses a random-pool boss.
+    unlocks the One-Eyed. Progress is kept in `meta.chapters`.
+  - **The Orc King's phase 1** (floor 50, `updateKing` in `index.html`): hammer
+    combo, hammer throw that returns from behind, and the charge that staggers
+    him when parried. At 70% his mask falls in a short cutscene. Phases 2 and 3
+    aren't built yet, so after the unmask he keeps his phase 1 attacks until he
+    falls, then Chapter 1 completes. He uses a placeholder look drawn in code
+    (`drawKing`). In the practice arena he's phase 1 only for now.
   - **A shared system for interactive moments** (`QTE` in `index.html`): timed
     taps and mashing, with the heal-a-little-and-retry rule (`qteHealBack`). The
     Pyromaniac's scene runs on it.
@@ -242,7 +247,8 @@ Code facts, so plans and code stay in sync:
     and on death). It's a starting point for the phase 2 heart scene.
 - **Planned, not built:**
   - The opening cutscene.
-  - The Orc King and his cutscenes.
+  - The Orc King's phases 2 and 3, the heart-and-arm scene, the eye scene and
+    the lieutenant's return.
   - The shattering reward screen and the fall into Hell.
   - Chapters 2–5.
 - **The random-pool bosses in the game today:** the Bell Tyrant, the Hollow

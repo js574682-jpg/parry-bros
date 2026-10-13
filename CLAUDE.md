@@ -24,6 +24,17 @@ HTML, CSS, embedded art and fonts, and one big script wrapped in `(() => { ... }
   from a save or backup file must be validated. Use `own(table, key)` (not
   `table[key]`) when checking a name that came from save data.
 
+## Story systems
+
+- **Interactive moments (QTEs):** add an entry to `QTE` (`type: 'timed'` or `'mash'`,
+  with `onStart`/`onDone`), start it with `startQte(id, boss)`, and use
+  `qteHealBack(boss, at, heal)` for the miss rule. `run.qte` holds only plain
+  numbers so a saved climb restores mid-moment.
+- **Cutscenes:** add an entry to `CUTSCENES` (a list of shots) and call
+  `playCutscene(id, after)`. They can be skipped once seen (`meta.seen['cutscene:<id>']`).
+- **Chapter end:** clearing floor `CHAPTER_FLOORS` (50) calls `completeChapter()`.
+  `bankRun()` holds the end-of-run rewards shared with `die()`.
+
 ## Tests
 
 `npm test` (after `npm install` and `npx playwright install chromium`) runs:

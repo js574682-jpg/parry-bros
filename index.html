@@ -727,6 +727,8 @@ body{font-size:16px;line-height:1.5;font-synthesis:none}
 #app #s-title .tagline::before{display:none}
 #app .btn::before,#app .savedel::before{content:var(--icon-content,none);display:inline-block;width:16px;height:16px;flex:none;background:var(--icon-url) center/contain no-repeat;image-rendering:pixelated}
 #app .savedel{--icon-content:''}
+#app #s-death.won h2::before{display:none}
+#app #cs-skip{position:absolute;top:max(14px,env(safe-area-inset-top));right:14px;z-index:8;min-height:40px;padding:0 18px;width:auto}
 @media(max-width:440px){
  #app .item:has(>.buy){grid-template-columns:36px minmax(0,1fr);gap:10px}
  #app .item:has(>.buy) .ic{width:36px;height:36px}
@@ -929,6 +931,7 @@ body{font-size:16px;line-height:1.5;font-synthesis:none}
     <button id="riposte" aria-label="Ult"><span class="fill" id="riposte-fill"></span><span class="lbl" id="riposte-lbl">Spin</span></button>
   </footer>
 
+  <button class="btn ghost" id="cs-skip" hidden>Skip</button>
   <div id="tut" hidden>
     <div class="box">
       <div class="top"><span class="eyebrow" id="tut-step">Training 1 / 7</span><button class="skip" id="tut-skip">Skip training</button></div>
@@ -1262,7 +1265,7 @@ body{font-size:16px;line-height:1.5;font-synthesis:none}
   <!-- Death -->
   <section class="screen" id="s-death" hidden>
     <div class="wrap" style="margin-block:auto">
-      <div class="eyebrow" style="color:var(--hex)">You have fallen</div>
+      <div class="eyebrow" id="death-eyebrow" style="color:var(--hex)">You have fallen</div>
       <h2 id="death-title">Floor 1</h2>
       <div class="stats">
         <div class="stat"><b id="d-floor">0</b><span>Floors</span></div>
@@ -1461,6 +1464,7 @@ const BOSSES = [
 ];
 // floor 25 (and every 25th floor after it) always brings the Wraith; the other bosses share the rest
 const WRAITH_FLOOR = 25;
+const CHAPTER_FLOORS = 50;   // clearing this floor ends the chapter (the Orc King will fight here)
 BOSSES.push({ name:'The Masked Wraith', color:'#c8b8ff', hp:560, kind:'wraith', escorts:0, fixed:true,
   intro:'It mixes knife volleys with marked dash combos. Parry each dash or step off its line. Only parrying the final dash creates a stun opening. As its mask cracks, it gets faster and its combos get longer.' });
 const SISTERS = [
@@ -1673,6 +1677,7 @@ function normalizeMeta(data){
   m.banished = Array.isArray(m.banished) ? m.banished.filter(id => own(BOON, id)) : [];
   m.seen = Object.assign({}, (data && data.seen) || {});
   m.encounters=Object.assign({},data&&data.encounters||{});
+  m.chapters=data&&data.chapters&&typeof data.chapters==='object'&&!Array.isArray(data.chapters)?data.chapters:{};
   if (!own(DIFFS, m.diff)) m.diff = 'normal';
   // saves from before the training and the enemy cards: don't make old hands sit through them
   if (data && data.runs > 0 && data.tutDone == null) {
@@ -2016,7 +2021,7 @@ function startFloor(){
   run.floorVitality=vitality;
   run.enemies = []; run.eproj = []; run.fproj = []; run.pending = []; run.boss = null; run.hazards = []; run.wickExplosions=[]; run.combatFx=[];
   if(run.superBro){run.superBro.units=[];run.superBro.active=0;run.superBro.flame=null;run.superBro.waypoint=null;run.superBro.moe=null;run.superBro.x=L.cx;run.superBro.y=L.cy-70;}
-  run.necro=null;run.pyroQte=null;run.maskScene=null;run.deadeye=null;run.cleave=null;run.stagger = 0; run.clearTimer = -1; run.press = null; run.windUsed = false;
+  run.necro=null;run.qte=null;run.maskScene=null;run.deadeye=null;run.cleave=null;run.stagger = 0; run.clearTimer = -1; run.press = null; run.windUsed = false;
   run.hero.x = L.cx; run.hero.y = L.cy; run.hero.vx = run.hero.vy = 0; run.hero.back = 0; run.hero.dodge = null;
   for (let i = 0; i < 3; i++) { const m = run.minions[i]; if (m) { const p = minionHome(i); m.px = p.x; m.py = p.y; } }
   run.focus = Math.max(run.focus, 25 * rank('focus'));
@@ -2054,7 +2059,7 @@ function startFloor(){
 
 // the in-between bosses come from a shuffled pool: you see every one before any repeats
 function storyBossForFloor(f){
-  const kind = f === 10 ? 'warden' : f === 20 ? 'illusionist' : f === 30 ? 'pyromaniac' : f === 40 ? 'necromancer' : f % WRAITH_FLOOR === 0 && !run.training ? 'wraith' : null;
+  const kind = f === 10 ? 'warden' : f === 20 ? 'illusionist' : f === 30 ? 'pyromaniac' : f === 40 ? 'necromancer' : f === WRAITH_FLOOR && !run.training ? 'wraith' : null;
   return kind ? BOSSES.find(b => b.kind === kind) : null;
 }
 function nextBoss(){
@@ -3239,7 +3244,7 @@ const canCharge = () => rank('charge') > 0;
 const chargeTime = () => rank('charge') >= 2 ? 0.7 : 1.0;
 function parryPress(id){
   if (!run || run.over || mode !== 'play') return;
-  if(run.pyroQte){pyroTrialInput();return;}
+  if(run.qte){qteInput();return;}
   if (run.cleave || run.deadeye) return;
   if (!canCharge()) { tryParry(); return; }
   if (run.press) { run.press = null; tryParry(); return; }   // a second finger is just a tap
@@ -3577,7 +3582,7 @@ function willFx(){
   if (syn('deathwish')) run.iframes = 3;
 }
 function damageHero(dmg){
-  if (run.over || run.pyroQte) return;
+  if (run.over || run.qte) return;
   dmg *= takenMul();
   if (twistOn('glass')) dmg *= 2;
   if (run.training) {                                  // nobody gets hurt in training
@@ -3643,7 +3648,7 @@ function killEnemy(e, byBro){
   }
 }
 function damageBoss(dmg, big, byBro, dot=false){
-  const b = run.boss; if (!b || b.dead || run.pyroQte || necroProtected(b)) return;
+  const b = run.boss; if (!b || b.dead || run.qte || necroProtected(b)) return;
   dmg *= foeMul(b.hp / b.maxHp)*(b.broMarkT>0?1+b.broMark:1);
   if(byBro&&dmg>0)b.broAssist=true;
   b.hp -= dmg; if(!dot)markFoeHit(b);
@@ -3937,7 +3942,7 @@ function update(dt){
   updateFx(dt);
   if (mode !== 'play' || run.over) return;
   updatePresentation(dt);
-  if(run.pyroQte){updatePyroTrial(dt);return;}
+  if(run.qte){updateQte(dt);return;}
   updateSword(dt);
   updatePress(dt);
   if (run.cleave) { run.cleave.t -= dt; if (run.cleave.t <= 0) cleaveResolve(); return; }   // time is stopped
@@ -3956,11 +3961,11 @@ function update(dt){
   else updateSpawns(edt);
   updatePending();
   const frozen = run.gaze > 0;
-  updateEnemies(edt, frozen); updateBoss(edt, frozen); if(run.pyroQte)return;tickFoes(edt);if(run.pyroQte)return;
-  updateSuper(sdt);if(run.pyroQte)return;
-  updateEProj(edt);if(run.pyroQte)return;
+  updateEnemies(edt, frozen); updateBoss(edt, frozen); if(run.qte)return;tickFoes(edt);if(run.qte)return;
+  updateSuper(sdt);if(run.qte)return;
+  updateEProj(edt);if(run.qte)return;
   if (mode !== 'play') return;
-  updateMinions(sdt); updateFriendly(sdt);if(run.pyroQte)return;tickCompanionEffects(sdt);if(run.pyroQte)return; resolveWickExplosions();if(run.pyroQte)return; updateCoins(sdt);
+  updateMinions(sdt); updateFriendly(sdt);if(run.qte)return;tickCompanionEffects(sdt);if(run.qte)return; resolveWickExplosions();if(run.qte)return; updateCoins(sdt);
   run.enemies = run.enemies.filter(e => !e.dead);
   if (!run.training) checkClear(sdt);
 }
@@ -5057,11 +5062,12 @@ function drawUltHud(g,t){drawCompactCombatStatus(g);}
 function render(t){
   const g = ctx;
   g.setTransform(DPR * ZOOM, 0, 0, DPR * ZOOM, 0, 0);
+  if (mode === 'cutscene') { drawCutscene(g, t); return; }
   if (mode === 'lobby' || LOBBY_SUB.has(mode)) { drawLobby(g, t); return; }
   g.drawImage(bg, 0, 0, W, H);
   drawTorchFlames(g, t);
   if (!run) return;
-  if(run.pyroQte){drawPyromaniac(g,run.boss,t);drawPyroTrial(g,t);return;}
+  if(run.qte){drawQte(g,t);return;}
   if(run.maskScene){drawMaskScene(g);return;}
   const sh = run.shake*shakeScale();
   if (sh > 0) g.translate(rand(-sh, sh) * 0.6, rand(-sh, sh) * 0.6);
@@ -5157,7 +5163,7 @@ function render(t){
     g.fillText(run.hint, W / 2, L.top + 24);
     g.globalAlpha = 1;
   }
-  drawUltHud(g, t);drawPyroTrial(g,t);drawMaskScene(g);
+  drawUltHud(g, t);drawMaskScene(g);
 
 }
 
@@ -5502,31 +5508,149 @@ function updatePyromaniac(b,dt){
   s.hazards=s.hazards.filter(h=>h.t>-h.dur);
   b.timer-=dt;if(b.timer<=0)beginPyroAttack(b);
 }
-function beginPyroTrial(b){
-  if(run.pyroQte)return;
-  const s=pyroState(b);s.hazards=[];s.shots=0;
-  run.eproj=[];run.fproj=[];run.pending=[];run.press=null;run.cleave=null;run.deadeye=null;run.wickExplosions=[];run.hitstop=0;
-  run.hero.x=L.cx;run.hero.y=L.cy;run.hero.vx=run.hero.vy=0;keys.clear();resetStick();
-  run.pyroQte={t:0,hits:0,ready:.9};sfx.bell();
+// The Pyromaniac's "protect your bros" moment, on the shared QTE system below.
+function beginPyroTrial(b){ startQte('pyro-protect',b); }
+function drawPyroTrialBackdrop(g,t){
+  drawPyromaniac(g,run.boss,t);
+  g.save();g.fillStyle='rgba(32,5,10,.74)';g.fillRect(0,0,W,H);
+  for(let i=0;i<24;i++){const a=i*Math.PI/12;drawPixelFlame(g,L.cx+Math.cos(a)*L.rx*.8,L.cy+Math.sin(a)*L.ry*.8,35*L.scale,t,i);}
+  glow(g,L.cx,L.cy,90*L.scale,'#7adbff',.5);g.strokeStyle='#b8efff';g.lineWidth=4;g.beginPath();g.arc(L.cx,L.cy,65*L.scale,0,Math.PI*2);g.stroke();
+  drawHero(g,t);const bros=run.minions.filter(Boolean);bros.forEach((m,i)=>drawMinion(g,m.type,L.cx+(i-(bros.length-1)/2)*30*L.scale,L.cy+30*L.scale,.65,t,{}));
+  if(run.superBro)drawCompanionSprite(g,run.superBro.id==='robots'?'joe':run.superBro.id,L.cx,L.cy+55*L.scale,1);
+  g.restore();
 }
-function pyroTrialInput(){
-  const q=run?.pyroQte;if(!q||mode!=='play'||q.ready>0)return;
-  if(Math.abs(q.t-.95)>.22){finishPyroTrial(false);return;}
-  q.hits++;q.t=0;q.ready=.3;run.shake=4;sfx.parry();
-  if(q.hits>=3)finishPyroTrial(true);
+
+/* ================= INTERACTIVE MOMENTS (QTEs) ================= */
+// Story moments where the fight stops and you hit timed taps or mash. Each entry in QTE is one moment:
+//   type 'timed': a cursor sweeps a bar; tap while it's over the gold zone, `taps` times in a row.
+//                 Tapping outside the zone, or letting the cursor pass it, is a miss.
+//   type 'mash':  tap fast enough to fill the meter (`presses` taps, draining at `decay` per second)
+//                 before `time` seconds run out.
+// onStart(boss) sets the scene up; onDone(boss, success) decides what happens next. The usual rule for a
+// miss is qteHealBack: the boss heals a little above the trigger point, the fight resumes, and the
+// moment comes back once you knock him down to it again. run.qte only holds plain numbers, so a climb
+// saved mid-moment restores cleanly.
+const QTE_TIMED = { bar:1.3, target:.95, window:.22, first:.9, between:.3 };
+const QTE = {
+  'pyro-protect': {
+    type:'timed', taps:3, title:'PROTECT YOUR BROS', hint:'Three timed taps · click or Space', backdrop:drawPyroTrialBackdrop,
+    onStart(b){
+      const s=pyroState(b);s.hazards=[];s.shots=0;
+      run.eproj=[];run.fproj=[];run.pending=[];run.cleave=null;run.deadeye=null;run.wickExplosions=[];run.hitstop=0;
+      run.hero.x=L.cx;run.hero.y=L.cy;run.hero.vx=run.hero.vy=0;keys.clear();resetStick();
+    },
+    onDone(b,success){
+      if(!b)return;const s=pyroState(b);s.trialDone=success;s.hazards=[];s.shots=0;
+      b.timer=success?1.4:2;b.state='idle';run.iframes=Math.max(run.iframes,1.2);
+      if(success){b.hp=b.maxHp*.5;run.banner=1.8;run.bannerText='Bros protected!';burst(L.cx,L.cy,'#8edfff',40,220);sfx.riposte();}
+      else qteHealBack(b,.5,.08,'His fire rekindles');
+    },
+  },
+};
+function startQte(id,b){
+  const D=QTE[id];if(!run||run.qte||!D)return false;
+  run.qte={id,t:0,hits:0,fill:0,time:0,ready:D.ready??QTE_TIMED.first};run.press=null;
+  if(D.onStart)D.onStart(b);sfx.bell();return true;
 }
-function updatePyroTrial(dt){
-  const q=run.pyroQte;if(q.ready>0){q.ready=Math.max(0,q.ready-dt);return;}
-  q.t+=dt;if(q.t>1.17)finishPyroTrial(false);
+function qteInput(){
+  const q=run?.qte;if(!q||mode!=='play'||q.ready>0)return;const D=QTE[q.id];
+  if(!D){run.qte=null;return;}
+  if(D.type==='mash'){q.fill=Math.min(1,q.fill+1/D.presses);run.shake=Math.max(run.shake,2);tone(300+q.fill*500,.05,'square',.04);if(q.fill>.999)finishQte(true);return;}
+  const T={...QTE_TIMED,...D};
+  if(Math.abs(q.t-T.target)>T.window){finishQte(false);return;}
+  q.hits++;q.t=0;q.ready=T.between;run.shake=4;sfx.parry();
+  if(q.hits>=D.taps)finishQte(true);
 }
-function finishPyroTrial(success){
-  const b=run.boss;if(!b||!run.pyroQte)return;
-  run.pyroQte=null;const s=pyroState(b);s.trialDone=success;s.hazards=[];s.shots=0;
-  b.hp=b.maxHp*(success?.5:.58);b.timer=success?1.4:2;b.state='idle';
-  run.iframes=Math.max(run.iframes,1.2);run.banner=1.8;run.bannerText=success?'Bros protected!':'His fire rekindles';
-  if(!success)floatText(L.cx,L.cy-40,'Boss healed 8% · retry at half HP','#ffad6b',16,true);
-  else{burst(L.cx,L.cy,'#8edfff',40,220);sfx.riposte();}
+function updateQte(dt){
+  const q=run.qte,D=QTE[q.id];if(!D){run.qte=null;return;}
+  if(q.ready>0){q.ready=Math.max(0,q.ready-dt);return;}
+  if(D.type==='mash'){q.time+=dt;q.fill=Math.max(0,q.fill-(D.decay||0)*dt);if(q.time>=D.time)finishQte(false);return;}
+  const T={...QTE_TIMED,...D};q.t+=dt;if(q.t>T.target+T.window)finishQte(false);
 }
+function finishQte(success){
+  const q=run.qte;if(!q)return;run.qte=null;
+  const D=QTE[q.id];if(D&&D.onDone)D.onDone(run.boss,success);
+}
+// The miss rule: heal the boss to a little above the point that triggers the moment.
+function qteHealBack(b,at,heal,banner){
+  if(!b)return;b.hp=Math.min(b.maxHp,b.maxHp*(at+heal));
+  run.banner=1.8;run.bannerText=banner||'Missed!';
+  floatText(L.cx,L.cy-40,`Boss healed ${Math.round(heal*100)}% · retry at ${Math.round(at*100)}% HP`,'#ffad6b',16,true);
+}
+function drawQte(g,t){
+  const q=run.qte,D=q&&QTE[q.id];if(!D)return;
+  if(D.backdrop)D.backdrop(g,t,q);else{g.fillStyle='rgba(8,8,18,.8)';g.fillRect(0,0,W,H);drawHero(g,t);}
+  g.save();g.textAlign='center';g.textBaseline='middle';g.fillStyle='#fff0d5';
+  let size=25;g.font='800 25px Parry Pixel, monospace';
+  while(size>14&&g.measureText(D.title||'').width>W-32){size--;g.font='800 '+size+'px Parry Pixel, monospace';}   // long titles shrink to fit a phone
+  g.fillText(D.title||'',W/2,L.top+65);
+  g.font='700 15px Parry Pixel, monospace';g.fillText(D.hint||(D.type==='mash'?'Tap as fast as you can · click or Space':'Timed taps · click or Space'),W/2,L.top+94,W-24);
+  const y=L.cy+110*L.scale,w=Math.min(280,W-48),x=(W-w)/2;
+  g.fillStyle='#21192d';g.fillRect(x,y,w,20);
+  if(D.type==='mash'){
+    g.fillStyle='#ff6b8a';g.fillRect(x,y,w*q.fill,20);
+    g.font='700 16px Parry Pixel, monospace';g.fillStyle='#fff1d7';
+    g.fillText(q.ready>0?'Get ready…':'MASH! · '+Math.max(0,D.time-q.time).toFixed(1)+'s',W/2,y+47);
+  }else{
+    const T={...QTE_TIMED,...D};
+    g.fillStyle='#ffc55e';g.fillRect(x+w*(T.target-T.window)/T.bar,y,w*2*T.window/T.bar,20);
+    g.fillStyle='#fff';g.fillRect(x+w*clamp(q.t/T.bar,0,1)-2,y-5,4,30);
+    g.font='700 16px Parry Pixel, monospace';g.fillStyle='#fff1d7';
+    g.fillText(q.ready>0?'Get ready…':Math.abs(q.t-T.target)<=T.window?'TAP NOW!':'Wait for gold…',W/2,y+47);
+    for(let i=0;i<D.taps;i++){g.fillStyle=i<q.hits?'#8fe5fa':'#5f4050';g.fillRect(W/2-(D.taps*25-7)/2+i*25,y+68,18,8);}
+  }
+  g.restore();
+}
+
+/* ================= CUTSCENES ================= */
+// A cutscene is a list of shots drawn on the game canvas. Tapping (or Space/Enter) moves on to the next
+// shot once it has been up for a moment. The Skip button only appears for cutscenes already seen.
+// Each shot: { dur: seconds, title, sub, draw(g, t, k) } where k runs 0→1 over the shot.
+const CUTSCENES = {
+  'chapter1-complete': { shots:[
+    { dur:3.4, title:'Chapter 1', sub:'The Tower', draw:drawCutsceneEmbers },
+    { dur:3.4, title:'Complete', sub:'Floor 50 cleared', draw:drawCutsceneEmbers },
+  ] },
+};
+let cutscene = null;
+function playCutscene(id,after){
+  const C=CUTSCENES[id];if(!C){if(after)after();return;}
+  cutscene={id,i:0,t:0,after};mode='cutscene';hud(false);show();
+  $('cs-skip').hidden=!(meta.seen&&meta.seen['cutscene:'+id]);
+}
+function updateCutscene(dt){
+  if(mode!=='cutscene'||!cutscene)return;
+  cutscene.t+=dt;if(cutscene.t>=CUTSCENES[cutscene.id].shots[cutscene.i].dur)nextCutsceneShot();
+}
+function nextCutsceneShot(){
+  if(!cutscene)return;cutscene.i++;cutscene.t=0;
+  if(cutscene.i>=CUTSCENES[cutscene.id].shots.length)endCutscene();
+}
+function cutsceneTap(){ if(cutscene&&cutscene.t>.6)nextCutsceneShot(); }
+function endCutscene(){
+  const c=cutscene;if(!c)return;cutscene=null;$('cs-skip').hidden=true;
+  meta.seen=meta.seen||{};meta.seen['cutscene:'+c.id]=true;saveMeta();
+  if(c.after)c.after();
+}
+function drawCutscene(g,t){
+  g.fillStyle='#05050b';g.fillRect(0,0,W,H);
+  const c=cutscene;if(!c)return;const shot=CUTSCENES[c.id].shots[c.i];if(!shot)return;
+  const k=clamp(c.t/shot.dur,0,1),fade=Math.min(1,c.t/.5,(shot.dur-c.t)/.5);
+  g.save();g.globalAlpha=clamp(fade,0,1);
+  if(shot.draw)shot.draw(g,t,k);
+  g.textAlign='center';g.textBaseline='middle';
+  if(shot.title){g.font='800 46px Parry Pixel, monospace';g.lineWidth=8;g.strokeStyle='rgba(0,0,0,.8)';g.strokeText(shot.title,W/2,H*.44);g.fillStyle='#dfe1f5';g.fillText(shot.title,W/2,H*.44);}
+  if(shot.sub){g.font='700 18px Parry Pixel, monospace';g.fillStyle='#f4b73e';g.fillText(shot.sub.toUpperCase(),W/2,H*.44+44);}
+  g.restore();
+  const bar=Math.round(H*.09);g.fillStyle='#000';g.fillRect(0,0,W,bar);g.fillRect(0,H-bar,W,bar);   // letterbox
+}
+function drawCutsceneEmbers(g,t){
+  for(let i=0;i<40;i++){
+    const x=(i*97.3%1)*W,sp=18+i%7*6,y=H-((t*sp+i*53)%(H+40))+20,a=.25+(i%5)*.1;
+    g.fillStyle=i%3?`rgba(255,150,70,${a})`:`rgba(255,215,140,${a})`;g.fillRect(Math.round(x),Math.round(y),2+i%2,2+i%2);
+  }
+}
+
 function drawPyroHazards(g,t){
   const b=run.boss;if(!b||b.dead||b.def.kind!=='pyromaniac')return;
   g.save();g.beginPath();g.ellipse(L.cx,L.cy,L.rx,L.ry,0,0,Math.PI*2);g.clip();
@@ -5553,21 +5677,6 @@ function drawPyromaniac(g,b,t){
   g.fillStyle='#e4a449';g.fillRect(34,-34,5,75);g.fillRect(27,-35,19,6);
   drawPixelFlame(g,36,-35,cast?26:18,t,2);drawPixelFlame(g,0,-29,15,t,5);
   if(cast)drawPixelFlame(g,-32,-21,20,t,7);g.restore();
-}
-function drawPyroTrial(g,t){
-  const q=run.pyroQte;if(!q)return;
-  g.save();g.fillStyle='rgba(32,5,10,.74)';g.fillRect(0,0,W,H);
-  for(let i=0;i<24;i++){const a=i*Math.PI/12;drawPixelFlame(g,L.cx+Math.cos(a)*L.rx*.8,L.cy+Math.sin(a)*L.ry*.8,35*L.scale,t,i);}
-  glow(g,L.cx,L.cy,90*L.scale,'#7adbff',.5);g.strokeStyle='#b8efff';g.lineWidth=4;g.beginPath();g.arc(L.cx,L.cy,65*L.scale,0,Math.PI*2);g.stroke();
-  drawHero(g,t);const bros=run.minions.filter(Boolean);bros.forEach((m,i)=>drawMinion(g,m.type,L.cx+(i-(bros.length-1)/2)*30*L.scale,L.cy+30*L.scale,.65,t,{}));
-  if(run.superBro)drawCompanionSprite(g,run.superBro.id==='robots'?'joe':run.superBro.id,L.cx,L.cy+55*L.scale,1);
-  g.textAlign='center';g.textBaseline='middle';g.fillStyle='#fff0d5';g.font='800 25px Parry Pixel, monospace';g.fillText('PROTECT YOUR BROS',W/2,L.top+65);
-  g.font='700 15px Parry Pixel, monospace';g.fillText('Three timed taps · click or Space',W/2,L.top+94);
-  const y=L.cy+110*L.scale,w=Math.min(280,W-48),x=(W-w)/2;
-  g.fillStyle='#21192d';g.fillRect(x,y,w,20);g.fillStyle='#ffc55e';g.fillRect(x+w*.73/1.3,y,w*.44/1.3,20);
-  const cursor=clamp(q.t/1.3,0,1);g.fillStyle='#fff';g.fillRect(x+w*cursor-2,y-5,4,30);
-  g.font='700 16px Parry Pixel, monospace';g.fillStyle='#fff1d7';g.fillText(q.ready>0?'Get ready…':Math.abs(q.t-.95)<=.22?'TAP NOW!':'Wait for gold…',W/2,y+47);
-  for(let i=0;i<3;i++){g.fillStyle=i<q.hits?'#8fe5fa':'#5f4050';g.fillRect(W/2-34+i*25,y+68,18,8);}g.restore();
 }
 
 /* ================= THE LOBBY ================= */
@@ -6794,7 +6903,7 @@ function renderShop(){
   else { mb.innerHTML = `<span class="coin"></span>${fmt(mc)}`; mb.disabled = run.gold < mc; mb.onclick = () => { if (!spend(mc)) return; healHero(25); renderShop(); }; }
   it.appendChild(mb); ex.appendChild(it);
   const next = run.floor + 1;
-  $('btn-climb').textContent = isBossFloor(next) ? `Climb to floor ${next} · boss` : `Climb to floor ${next}`;
+  $('btn-climb').textContent = next >= CHAPTER_FLOORS ? `Climb to floor ${next} · chapter finale` : isBossFloor(next) ? `Climb to floor ${next} · boss` : `Climb to floor ${next}`;
   renderDoors();if(mode==='shop')saveMeta();
 }
 // two doors up the stairs: the quiet one, or a twisted one with a reward
@@ -6870,6 +6979,7 @@ function floorCleared(){
   run.hint = '';
   meta.best = Math.max(meta.best, f); saveMeta();
   sfx.clear();
+  if (!run.training && f >= CHAPTER_FLOORS) { completeChapter(); return; }
   const extraBoon = tw && tw.boon;
   run.twist = null;
   run.boonRewards = [];
@@ -6882,6 +6992,13 @@ function die(){
   if (run.over) return;
   if(run.practice){practiceResult(false);return;}
   run.over = true; mode = 'dying'; run.press = null;
+  bankRun();
+  startHeart('death'); run.shake = 6;
+  setTimeout(() => { if (run && run.over) { run.banner = 1.2; run.bannerText = 'Fallen'; sfx.death(); } }, 1000);
+  setTimeout(showDeath, 2300);
+}
+// end-of-run rewards: Embers, gems, XP, class XP, bro coins, quest progress
+function bankRun(){
   const s = run.stats;
   const embers = Math.round((3 + s.cleared * 3 + s.bosses * 10 + Math.floor(s.perfects / 4) + Math.floor(s.supers / 2)) * DIFF().reward);
   const bestKey = { easy:'bestEasy', hard:'bestHard', nightmare:'bestNightmare' }[run.diff];
@@ -6899,9 +7016,24 @@ function die(){
   const before = classLv(cid); meta.classes[cid].xp += run.xpGained;
   run.clsUp = { id:cid, before, after:classLv(cid) };
   meta.broCoins = (meta.broCoins || 0) + run.broCoins; saveMeta();
-  startHeart('death'); run.shake = 6;
-  setTimeout(() => { if (run && run.over) { run.banner = 1.2; run.bannerText = 'Fallen'; sfx.death(); } }, 1000);
-  setTimeout(showDeath, 2300);
+}
+// Clearing floor 50 finishes Chapter 1. For now this plays a placeholder cutscene and the results
+// screen; the Orc King's fight and the fall into Hell will replace it (see docs/STORY.md).
+function chapterRecord(n){
+  if (!meta.chapters || typeof meta.chapters !== 'object' || Array.isArray(meta.chapters)) meta.chapters = {};
+  let c = meta.chapters[n];
+  if (!c || typeof c !== 'object' || Array.isArray(c)) c = meta.chapters[n] = {};
+  if (!Number.isInteger(c.clears) || c.clears < 0) c.clears = 0;
+  if (!c.diffs || typeof c.diffs !== 'object' || Array.isArray(c.diffs)) c.diffs = {};
+  return c;
+}
+function completeChapter(){
+  run.over = true; run.victory = true; run.press = null; run.qte = null;
+  const c = chapterRecord('1'); c.clears++; c.diffs[run.diff || 'normal'] = true;
+  run.unlocks = [];
+  if ((run.diff === 'hard' || run.diff === 'nightmare') && !ownsClass('oneeyed')) { meta.classes.oneeyed = { xp:0 }; run.unlocks.push('oneeyed'); }
+  bankRun();
+  playCutscene('chapter1-complete', showDeath);
 }
 function deathTip(){
   if(meta.broCoins>=30&&MINION_ORDER.some(k=>!owns(k)))return 'You can summon a new bro at the Barracks portal for 30 Bro Coins.';
@@ -6926,8 +7058,10 @@ function killerInfo(){
 }
 function showDeath(){
   mode = 'death'; hud(false);
-  const s = run.stats;
-  $('death-title').textContent = heroName() + ' fell on floor ' + run.floor + (run.diff && run.diff !== 'normal' ? ' (' + DIFF().name + ')' : '');
+  const s = run.stats, won = !!run.victory, diffTag = run.diff && run.diff !== 'normal' ? ' (' + DIFF().name + ')' : '';
+  $('death-eyebrow').textContent = won ? 'Chapter 1 complete' : 'You have fallen'; $('s-death').classList.toggle('won', won);
+  $('death-eyebrow').style.color = won ? 'var(--brass)' : 'var(--hex)';
+  $('death-title').textContent = won ? heroName() + ' cleared floor ' + run.floor + diffTag : heroName() + ' fell on floor ' + run.floor + diffTag;
   $('d-floor').textContent = s.cleared;
   $('d-perfect').textContent = s.perfects;
   $('d-super').textContent = s.supers;
@@ -6935,10 +7069,15 @@ function showDeath(){
   $('d-embers').textContent = '+' + run.earned;
   $('d-gems-card').hidden = !run.gemsEarned;
   $('d-gems').textContent = '+' + run.gemsEarned;
-  const kl = killerInfo();
+  const kl = won ? null : killerInfo();
   $('d-killer').hidden = !kl;
   if (kl) { $('d-killer-who').textContent = 'Killed by ' + kl.who; $('d-killer-tip').textContent = kl.tip; }
   const lu = run.levelUp, ex = [];
+  if (won) {
+    if ((run.unlocks || []).includes('oneeyed')) ex.push('<span style="color:#6fe38f"><b style="color:#6fe38f">The One-Eyed class unlocked!</b> Pick it from Classes in the lobby.</span>');
+    else if (!ownsClass('oneeyed')) ex.push('<span>Beat Chapter 1 on <b>Hard</b> to unlock the One-Eyed class.</span>');
+    ex.push('<span>Chapter 2 is coming.</span>');
+  }
   ex.push(`<span><b>+${run.xpGained} XP</b> · Level ${lu.after}</span>`);
   if (lu.before < UNLOCK_LV.forge && lu.after >= UNLOCK_LV.forge) ex.push('<span style="color:#6fe38f"><b style="color:#6fe38f">The Blacksmith is open!</b> Find him in the lobby.</span>');
   if (lu.before < UNLOCK_LV.gear && lu.after >= UNLOCK_LV.gear) ex.push('<span style="color:#6fe38f"><b style="color:#6fe38f">The Armoury is open!</b> Gear now drops, and your bag is in the top bar.</span>');
@@ -6956,7 +7095,7 @@ function showDeath(){
   const ready = questsReady();
   if (ready) ex.push(`<span>${ready} quest${ready > 1 ? 's' : ''} ready to claim in the lobby</span>`);
   $('d-extra').innerHTML = ex.join('');
-  $('death-tip').textContent = deathTip();
+  $('death-tip').textContent = won ? '' : deathTip();
   show('s-death'); $('s-death').scrollTop = 0;
 }
 
@@ -8101,9 +8240,10 @@ function syncInput(){
 canvas.addEventListener('pointerdown', ev => {
   ev.preventDefault();
   audioInit();
+  if (mode === 'cutscene') { cutsceneTap(); return; }
   if (mode !== 'play' && mode !== 'lobby') return;
   const q = canvasPt(ev);
-  if(mode==='play'&&run?.pyroQte){pyroTrialInput();return;}
+  if(mode==='play'&&run?.qte){qteInput();return;}
   if (TOUCH && padHit(q.x, q.y) && !stick.active) {
     stick.active = true; stick.id = ev.pointerId; stick.ox = q.x; stick.oy = q.y; stick.dx = 0; stick.dy = 0;
     try { canvas.setPointerCapture(ev.pointerId); } catch(e) {}
@@ -8140,7 +8280,7 @@ document.addEventListener('touchcancel', e => { if (!e.touches.length) resetStic
 canvas.addEventListener('pointerup', ev => { endStick(ev); if (mode === 'play') parryRelease('p' + ev.pointerId); });
 canvas.addEventListener('pointercancel', ev => { endStick(ev); if (run && run.press && run.press.id === 'p' + ev.pointerId) run.press = null; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-$('super-ult').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();audioInit();if(!run?.pyroQte)unleashSuper();});
+$('super-ult').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();audioInit();if(!run?.qte)unleashSuper();});
 $('practice-open').onclick=openPractice;
 $('practice-close').onclick=()=>openLobby(false,true);
 $('practice-enemy').onchange=practiceSelection;
@@ -8158,8 +8298,8 @@ $('portal-bro').onclick=()=>summonCompanion('bro');
 $('portal-super').onclick=()=>summonCompanion('super');
 $('portal-none').onclick=()=>{meta.superEquip=null;saveMeta();renderCompanions();};
 $('portal-dev').onclick=()=>{if(!meta.dev)return;for(const id of SUPER_ORDER)meta.superOwned[id]={xp:550};for(const id of MINION_ORDER)meta.unlocked[id]=true;saveMeta();renderCompanions();};
-$('riposte').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if(!run?.pyroQte)unleash(); });
-$('skill2').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if(!run?.pyroQte)useSkill(); });
+$('riposte').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if(!run?.qte)unleash(); });
+$('skill2').addEventListener('pointerdown', e => { e.preventDefault(); audioInit(); if(!run?.qte)useSkill(); });
 const MOVE_KEYS = ['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'];
 window.addEventListener('keydown', ev => {
   // Browser shortcuts must not move the hero or trigger a missed parry.
@@ -8167,8 +8307,9 @@ window.addEventListener('keydown', ev => {
   const k = ev.key.toLowerCase();
   keys.add(k);
   if (ev.repeat) return;
+  if (mode === 'cutscene') { if (k === ' ' || k === 'enter') { ev.preventDefault(); cutsceneTap(); } return; }
   if (mode === 'play') {
-    if(run.pyroQte){if(k==='escape'||k==='p')pause();else if(k===' '||k==='enter'){ev.preventDefault();pyroTrialInput();}return;}
+    if(run.qte){if(k==='escape'||k==='p')pause();else if(k===' '||k==='enter'){ev.preventDefault();qteInput();}return;}
     if (MOVE_KEYS.indexOf(k) >= 0) { ev.preventDefault(); return; }
     if (k === 'e' || k === 'r' || k === 'shift') { ev.preventDefault(); unleash(); }
     else if (k === 'f') { ev.preventDefault(); unleashSuper(); }
@@ -8299,6 +8440,7 @@ $('btn-sum10').onclick = () => summon(10);
 $('btn-sum-ok').onclick = closeSummon;
 $('btn-cls-dev').onclick = () => { for (const id of CLASS_ORDER) if (!ownsClass(id)) meta.classes[id] = { xp:0 }; for (const id of CLASS_ORDER) meta.classes[id].xp = Math.max(meta.classes[id].xp, CLASS_XP[4]); saveMeta(); toast('Every class unlocked at level 5'); renderClasses(); };
 $('btn-death-sanctum').onclick = () => openSanctum('death');
+$('cs-skip').onclick = () => { audioInit(); endCutscene(); };
 $('btn-death-again').onclick = () => openLobby(true);
 for (const k in DIFFS) $('btn-diff-' + k).onclick = () => pickDiff(k);
 $('btn-diff-cancel').onclick = closeDiff;
@@ -8310,7 +8452,7 @@ try { new ResizeObserver(resize).observe(canvas); } catch(e) {}
 let last = performance.now();
 function frame(now){
   const dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
-  try { syncInput(); update(dt); maybeAutosave(dt);render(now / 1000); updateHud(); } catch (err) { console.error(err); }
+  try { syncInput(); updateCutscene(dt); update(dt); maybeAutosave(dt);render(now / 1000); updateHud(); } catch (err) { console.error(err); }
   requestAnimationFrame(frame);
 }
 

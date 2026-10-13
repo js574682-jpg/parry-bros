@@ -212,22 +212,27 @@ Code facts, so plans and code stay in sync:
     Pyromaniac and Necromancer.
   - The floor-25 mask-drop scene.
   - The Pyromaniac's protect-your-bros scene.
+  - **Chapter 1 ends at floor 50.** Clearing it plays a placeholder "Chapter 1 /
+    Complete" cutscene and a results screen. Clearing it on Hard or Nightmare
+    unlocks the One-Eyed. Progress is kept in `meta.chapters`. Until the Orc King
+    exists, floor 50 uses a random-pool boss.
+  - **A shared system for interactive moments** (`QTE` in `index.html`): timed
+    taps and mashing, with the heal-a-little-and-retry rule (`qteHealBack`). The
+    Pyromaniac's scene runs on it.
+  - **A cutscene player** (`CUTSCENES`): shots drawn on the game canvas, tap to
+    move on, and a Skip button only for cutscenes already seen.
+  - **A heart-split effect already exists** (`startHeart`, used by Last Stand
+    and on death). It's a starting point for the phase 2 heart scene.
 - **Planned, not built:**
   - The opening cutscene.
-  - The Orc King.
-  - Chapter endings and transitions.
+  - The Orc King and his cutscenes.
+  - The shattering reward screen and the fall into Hell.
   - Chapters 2–5.
 - **The random-pool bosses in the game today:** the Bell Tyrant, the Hollow
   Choir, the Bell Ringer and the Three Sisters. That's 4; the plan needs at
   least 6.
-- **The Masked Wraith currently appears on every 25th floor** (`WRAITH_FLOOR` in
-  `index.html`), so he shows up on floor 50 too. That has to change when the
-  King is added (he should appear only on 25, then return in the King's
-  ending).
-- **There is no chapter end yet.** The tower climbs forever, and nothing special
-  happens at floor 50.
-- **The One-Eyed class exists**, but no one can unlock it until Chapter 1 has an
-  ending.
+- **The Masked Wraith appears on floor 25 only.** He's meant to return in the
+  King's ending, which isn't built yet.
 - **The Super Bros already exist** (the Warden, Samurai, Wick the Candle Knight,
   Joe & Moe, Phoenix and the Bro King). They're unlocked through the Bro
   Portal, not as a chapter reward. That would need to change if they become a

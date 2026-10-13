@@ -112,6 +112,89 @@ export async function regressions() {
     await g.context.close();
   });
 
+  // ---- Chapter 1 ending, QTEs and cutscenes ----
+
+  await check('The Masked Wraith fights on floor 25 only, not floor 50', async () => {
+    const g = await fresh();
+    await g.run("useSlot(0); meta.tutDone=true; beginRun();");
+    expect(await g.run("storyBossForFloor(25)?.kind"), 'wraith', 'floor 25 boss');
+    expect(await g.run("storyBossForFloor(50)?.kind ?? null"), null, 'floor 50 story boss');
+    await g.context.close();
+  });
+
+  const clearFloor50 = async (g, diff, before = '') => {
+    await g.run(`useSlot(0); noFile=false; meta.tutDone=true; ${before} beginRun('${diff}'); run.diff='${diff}'; run.floor=50; startFloor(); setPlay(); run.boss=null; run.enemies=[]; floorCleared();`);
+  };
+
+  await check('Clearing floor 50 on Hard finishes Chapter 1 and unlocks the One-Eyed', async () => {
+    const g = await fresh();
+    await clearFloor50(g, 'hard');
+    expect(await g.run('mode'), 'cutscene', 'mode after floor 50');
+    expect(await g.run('run.over && run.victory'), true, 'run over as a victory');
+    expect(await g.run('ownsClass("oneeyed")'), true, 'One-Eyed owned');
+    expect(await g.run('meta.chapters["1"].clears'), 1, 'chapter clears');
+    expect(await g.run('hasSavedRun()'), false, 'finished climb is not saved to continue');
+    expect(await g.page.isVisible('#cs-skip'), false, 'skip button on a first viewing');
+    for (let i = 0; i < 2; i++) { await g.page.waitForTimeout(700); await g.page.mouse.click(200, 400); }
+    expect(await g.run('mode'), 'death', 'results screen after the cutscene');
+    expect(await g.page.textContent('#death-eyebrow'), 'Chapter 1 complete', 'results heading');
+    expect(await g.run("$('s-death').classList.contains('won')"), true, 'win styling (no skull)');
+    if (!(await g.page.textContent('#d-extra')).includes('One-Eyed class unlocked')) throw new Error('results do not mention the One-Eyed unlock');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('Clearing floor 50 on Normal does not unlock the One-Eyed; replays can skip the cutscene', async () => {
+    const g = await fresh();
+    await clearFloor50(g, 'normal', "meta.seen=meta.seen||{}; meta.seen['cutscene:chapter1-complete']=true;");
+    expect(await g.run('ownsClass("oneeyed")'), false, 'One-Eyed owned');
+    expect(await g.page.isVisible('#cs-skip'), true, 'skip button for a seen cutscene');
+    await g.page.click('#cs-skip');
+    expect(await g.run('mode'), 'death', 'results screen after skipping');
+    if (!(await g.page.textContent('#d-extra')).includes('on Hard')) throw new Error('results do not say how to unlock the One-Eyed');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('Dying still shows the normal "You have fallen" screen', async () => {
+    const g = await fresh();
+    await g.run("useSlot(0); noFile=false; meta.tutDone=true; beginRun(); setPlay(); run.hp=0; die();");
+    await g.page.waitForTimeout(2600);
+    expect(await g.run('mode'), 'death', 'mode after dying');
+    expect(await g.page.textContent('#death-eyebrow'), 'You have fallen', 'death heading');
+    expect(await g.run("$('s-death').classList.contains('won')"), false, 'win styling on a death');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check("Pyromaniac's protect-your-bros moment: a miss heals 8%, success holds at half", async () => {
+    const g = await fresh();
+    await g.run("useSlot(0); meta.tutDone=true; beginRun(); run.floor=30; startFloor(); setPlay(); run.boss.hp=run.boss.maxHp*.52; damageBoss(run.boss.maxHp*.1);");
+    expect(await g.run("run.qte && run.qte.id"), 'pyro-protect', 'QTE started');
+    expect(await g.run("Math.round(run.boss.hp/run.boss.maxHp*100)"), 50, 'boss held at 50%');
+    await g.run("run.qte.ready=0; run.qte.t=0.1; qteInput();");               // too early: a miss
+    expect(await g.run("run.qte"), null, 'QTE over after a miss');
+    expect(await g.run("Math.round(run.boss.hp/run.boss.maxHp*100)"), 58, 'boss healed to 58%');
+    expect(await g.run("pyroState(run.boss).trialDone"), false, 'trial still to do');
+    await g.run("damageBoss(run.boss.maxHp*.1); for(let i=0;i<3;i++){ run.qte.ready=0; run.qte.t=.95; qteInput(); }");
+    expect(await g.run("pyroState(run.boss).trialDone"), true, 'trial done after 3 good taps');
+    expect(await g.run("Math.round(run.boss.hp/run.boss.maxHp*100)"), 50, 'boss at 50% after success');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
+  await check('Mash QTEs fill with taps and fail when time runs out', async () => {
+    const g = await fresh();
+    await g.run("QTE['test-mash']={type:'mash',presses:6,time:1.5,decay:0,title:'TEST',onDone:(b,ok)=>{window.__mash=ok;}}; useSlot(0); meta.tutDone=true; beginRun(); setPlay(); startQte('test-mash'); run.qte.ready=0;");
+    for (let i = 0; i < 6; i++) await g.page.keyboard.press('Space');
+    expect(await g.page.evaluate(() => window.__mash), true, 'mash success');
+    await g.run("window.__mash=null; startQte('test-mash'); run.qte.ready=0;");
+    await g.page.waitForTimeout(1900);
+    expect(await g.page.evaluate(() => window.__mash), false, 'mash timeout');
+    expect(g.errors.length, 0, 'page errors: ' + g.errors.join(' | '));
+    await g.context.close();
+  });
+
   await browser.close();
   return results;
 }

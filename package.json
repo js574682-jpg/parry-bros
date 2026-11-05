@@ -1,0 +1,12 @@
+{
+  "name": "parry-bros",
+  "private": true,
+  "description": "Parry Bros: a single-file browser game (index.html). The tests run it in headless Chromium.",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}

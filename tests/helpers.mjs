@@ -40,3 +40,22 @@ export async function openGame(browser, url, device = PHONE) {
   const run = code => page.evaluate(c => window.__eval(c), code);
   return { context, page, errors, run };
 }
+
+export function expect(actual, wanted, what) {
+  if (actual !== wanted) throw new Error(`${what}: expected ${JSON.stringify(wanted)}, got ${JSON.stringify(actual)}`);
+}
+
+// Runs one file of checks from tests/checks/. Each file default-exports
+// async ({ check, expect, fresh, PHONE, DESKTOP }) => { await check('name', async () => { ... }) }
+// fresh(device) opens the game on empty save storage (see openGame).
+export async function runChecks(define) {
+  const results = [], url = testCopy(), browser = await launch();
+  const check = async (name, fn) => {
+    try { await fn(); results.push({ name, ok: true }); }
+    catch (e) { results.push({ name, ok: false, why: e.message }); }
+  };
+  const fresh = device => openGame(browser, url, device);
+  try { await define({ check, expect, fresh, PHONE, DESKTOP }); }
+  finally { await browser.close(); }
+  return results;
+}

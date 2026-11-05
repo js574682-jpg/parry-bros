@@ -990,6 +990,17 @@ body{font-size:16px;line-height:1.5;font-synthesis:none}
       <button class="btn blue" id="btn-set-diff">Change difficulty</button>
       <button class="btn ghost" id="btn-set-sound">Sound: on</button>
       <button class="btn ghost" id="btn-set-shake">Screen shake: full</button><button class="btn ghost" id="btn-set-effects">Combat effects: full</button>
+      <details class="a11y-group" id="set-a11y"><summary>Accessibility</summary><div class="a11y-opts">
+        <p class="a11y-d">These apply to every save file on this device.</p>
+        <button class="btn ghost" id="btn-set-cues" aria-describedby="a11y-cues-d">Color-blind cues: off</button>
+        <p class="a11y-d" id="a11y-cues-d">Fake shots turn hollow, danger zones get stripes, and a ring marks the Perfect moment.</p>
+        <button class="btn ghost" id="btn-set-flash" aria-describedby="a11y-flash-d">Flashing: on</button>
+        <p class="a11y-d" id="a11y-flash-d">Off removes screen flashes and blinking warnings.</p>
+        <button class="btn ghost" id="btn-set-text" aria-describedby="a11y-text-d">Text size: normal</button>
+        <p class="a11y-d" id="a11y-text-d">Large makes menu text and small combat captions bigger.</p>
+        <button class="btn ghost" id="btn-set-vibrate" aria-describedby="a11y-vibrate-d">Vibration: on</button>
+        <p class="a11y-d" id="a11y-vibrate-d">Buzzes on hits and parries, on phones that can.</p>
+      </div></details>
       <button class="btn ghost" id="btn-set-saves">Switch save file</button>
       <button class="btn ghost" id="btn-save-export">Download save backup</button>
       <button class="btn ghost" id="btn-save-import">Restore save backup</button>
@@ -1359,6 +1370,39 @@ body{font-size:16px;line-height:1.5;font-synthesis:none}
   </div>
   <div id="toast" role="status"></div>
 </div>
+<style id="a11y">
+/* Accessibility and comfort options (Settings › Accessibility). The script's ACCESSIBILITY block sets
+   html.a11y-text (Text size: large) and html.a11y-noflash (Flashing: off). */
+#app .a11y-group{border:1px solid #454055;border-radius:8px!important;background:#191b2c;padding:10px 14px}
+#app .a11y-group>summary{cursor:pointer;min-height:32px;font-size:16px;line-height:2;color:#dfd7ee}
+#app .a11y-opts{display:flex;flex-direction:column;gap:6px;margin:10px 0 4px}
+#app .a11y-group p.a11y-d{font-size:12px;line-height:1.6;color:var(--dim);margin:0 2px 8px}
+#app .a11y-group p.a11y-d:first-child{margin-bottom:6px}
+#app .screen:focus{outline:none}
+#app #intro-a11y{font-size:14px;line-height:1.6;color:#ffe3a0}
+/* Text size: large. Only text grows; boxes that hold it keep their layout. Each :is() list holds
+   only class selectors (ids get their own rules), so later rules here win ties predictably. */
+html.a11y-text #app :is(p,.muted,.item .d,.boon p,.cls-detail .ab span,.guide-page p,.guide-page li,.portal-note,.odds,.diffbtn span,.companion-card p,.build-effect p,.odds-details p,.gain,.loss,.inventory-filter,.practice-fields label){font-size:19px;line-height:1.6}
+html.a11y-text #app :is(#s-save-restore p,#tut p,#synpop span){font-size:19px;line-height:1.6}
+html.a11y-text #app .cheat div{font-size:18px;line-height:1.5}
+html.a11y-text #app :is(.eyebrow,.seclabel,.boon .tag,.ccard .rt,.cls-detail .ab .k,.mile .st,.savecard .sl,.savecard .sd,.quest .bot,.door .db,.door .dr,.diffbtn i,.rchips span,.pboons span,.slot .lv,.ccard .lv,.fs span,.gear-compare span){font-size:15px;line-height:1.6}
+html.a11y-text #app .a11y-group p.a11y-d{font-size:15px}
+html.a11y-text #app :is(.btn,.buy,.pill,.setrow,.odds-details summary,.pause-build>summary,.ability-details>summary,.a11y-group>summary,.quest .rw,.slot .nm,.ccard .nm,.build-effect b){font-size:18px}
+html.a11y-text #app :is(.btn.small,.buy,.pill,.boon-tools .btn){font-size:16px}
+html.a11y-text #app .slot .buy{font-size:13px}
+html.a11y-text #app .a11y-opts .btn{font-size:17px;padding-inline:10px}
+html.a11y-text #app .a11y-group{padding-inline:10px}
+html.a11y-text #app .savedel{font-size:14px;width:auto;min-width:68px}
+html.a11y-text #app #tut .skip{font-size:14px}
+html.a11y-text #app #toast{font-size:17px}
+html.a11y-text #app :is(.item h3,.boon h3,.quest h3,.forge-next h3,.summon h3,.companion-card h3,.cls-detail .ab b){font-size:21px}
+html.a11y-text #app :is(.gtile .nm,.stat span,.gtile .eq,.ccard .eq,.tagnew,.chip){font-size:13px}
+html.a11y-text #app .bar span,html.a11y-text #app #hud .status span{font-size:12px}
+html.a11y-text #app .lvbadge span{font-size:10px}
+html.a11y-text #app :is(#lobbybar .cur,#hud .gold){font-size:15px}
+html.a11y-text #app #combo{font-size:13px}
+html.a11y-text #app #cust-name,html.a11y-text #app :is(select,input){font-size:18px}
+</style>
 <script>
 (() => {
 'use strict';
@@ -1818,7 +1862,7 @@ const sfx = {
   dong(heavy){ tone(heavy ? 196 : 294, heavy ? 0.9 : 0.5, 'sine', heavy ? 0.26 : 0.16); tone(heavy ? 392 : 588, 0.4, 'sine', 0.06); noise(0.06, 1800, 0.08); },
   zone(){ tone(240, 0.3, 'sawtooth', 0.04, 0, 520); },
 };
-function buzz(ms){ try { if (meta.sound && navigator.vibrate) navigator.vibrate(ms); } catch(e) {} }
+function buzz(ms){ try { if (a11yVibrates() && navigator.vibrate) navigator.vibrate(ms); } catch(e) {} }
 
 /* ================= UTIL ================= */
 const $ = id => document.getElementById(id);
@@ -2597,7 +2641,7 @@ function drawStoryZones(g,t){
   for(let i=0;i<3;i++){
     if(i===s.safe)continue;
     const x=L.cx-L.rx+i*width;
-    g.fillStyle=s.zoneFlash>0?'rgba(255,35,55,.65)':'rgba(235,35,50,.3)';
+    g.fillStyle=s.zoneFlash>0&&!a11yNoFlash()?'rgba(255,35,55,.65)':'rgba(235,35,50,.3)';
     g.fillRect(x,y,width,height);
     g.strokeStyle='#ff384d';g.lineWidth=3;g.strokeRect(x+2,y+2,width-4,height-4);
   }
@@ -3043,6 +3087,7 @@ function drawRinger(g, b, t){
     const big = c === 'X', r = big ? 6 : 4.2;
     if (live && i === slot) glow(g, x, y, 16, big ? '#ffd84a' : b.def.color, 0.9);
     g.fillStyle = big ? '#ffd84a' : b.def.color; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    if (big) a11yHeavyNote(g, x, y, r);
   }
   if (!live) { g.globalAlpha = 0.7; g.fillStyle = '#dfe1f5'; g.font = '700 10px Parry Pixel, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('NEXT', b.x, y + 17); }
   g.globalAlpha = 1;
@@ -3128,7 +3173,7 @@ function updateSisters(b, dt){
 }
 function drawSisters(g, b, t){
   for (const z of run.hazards) {                     // circles on the floor: get out before they fill
-    const k = clamp(z.t / z.T, 0, 1), warn = k > 0.72 && Math.floor(t * 16) % 2 === 0;
+    const k = clamp(z.t / z.T, 0, 1), warn = k > 0.72 && (a11yNoFlash() || Math.floor(t * 16) % 2 === 0);
     g.globalAlpha = 0.12 + 0.2 * k; g.fillStyle = z.color; g.beginPath(); g.arc(z.x, z.y, z.R, 0, Math.PI * 2); g.fill();
     g.globalAlpha = 0.35 + 0.3 * k; g.beginPath(); g.arc(z.x, z.y, z.R * k, 0, Math.PI * 2); g.fill();
     g.globalAlpha = warn ? 1 : 0.8; g.strokeStyle = warn ? '#ffffff' : z.color; g.lineWidth = 2.5; g.setLineDash([7, 5]);
@@ -4923,7 +4968,7 @@ function drawShot(g, p, t){
     return;
   }
   if (p.blink && p.blink.state === 1) {               // gone... and about to reappear here
-    const on = Math.floor(p.blink.t * 16) % 2 === 0, k = p.blink.t / p.blink.dur;
+    const on = a11yNoFlash() || Math.floor(p.blink.t * 16) % 2 === 0, k = p.blink.t / p.blink.dur;
     g.globalAlpha = on ? 1 : 0.35; g.strokeStyle = p.color; g.lineWidth = 3;
     for(const side of [-1,1]){g.beginPath();g.moveTo(p.x+side*(8+7*k),p.y-6);g.lineTo(p.x+side*(4+7*k),p.y);g.lineTo(p.x+side*(8+7*k),p.y+6);g.stroke();}
     g.fillStyle = p.color; g.beginPath(); g.arc(p.x, p.y, 3, 0, Math.PI * 2); g.fill();
@@ -5251,7 +5296,7 @@ function render(t){
   if(run.maskScene){drawMaskScene(g);return;}
   const sh = run.shake*shakeScale();
   if (sh > 0) g.translate(rand(-sh, sh) * 0.6, rand(-sh, sh) * 0.6);
-  drawStoryZones(g,t);drawPyroHazards(g,t);drawNecroArena(g,t);
+  drawStoryZones(g,t);drawPyroHazards(g,t);drawNecroArena(g,t);a11yZoneCues(g);
   drawFlames(g, t);
   drawGuard(g, t);
   drawCoins(g, t);drawFallenEnemies(g);
@@ -5308,7 +5353,7 @@ function render(t){
   g.setTransform(DPR*ZOOM,0,0,DPR*ZOOM,0,0);
   // Phoenix Heat shares the compact timed-status row.
   if (mode === 'play') drawPad(g);
-  if (run.hitFlash > 0) {
+  if (run.hitFlash > 0 && !a11yNoFlash()) {
     const v = g.createRadialGradient(L.cx, L.cy, Math.min(W, H) * 0.35, L.cx, L.cy, Math.max(W, H) * 0.75);
     v.addColorStop(0, 'rgba(255,68,112,0)'); v.addColorStop(1, `rgba(255,68,112,${0.35 * run.hitFlash})`);
     g.fillStyle = v; g.fillRect(0, 0, W, H);
@@ -6109,7 +6154,7 @@ function drawLobby(g, t){
       g.strokeStyle = '#f4b73e'; g.lineWidth = 1.6; g.beginPath(); g.arc(lx - 11, ly - 2, 3, Math.PI, 0); g.stroke();
       g.fillStyle = '#f4b73e'; g.fillRect(lx - 15, ly - 2, 8, 6);
       g.font = '700 11px Parry Pixel, monospace'; g.textAlign = 'left'; g.textBaseline = 'middle';
-      g.fillText('LV ' + UNLOCK_LV[s.id === 'forge' ? 'forge' : 'gear'], lx - 3, ly + 1); g.textAlign = 'center';
+      g.fillText('LV ' + UNLOCK_LV[s.id === 'forge' ? 'forge' : 'gear'], lx - 3, ly + 1, 36); g.textAlign = 'center';
     }
     g.restore();
   }
@@ -7515,6 +7560,224 @@ function guideNext(){
   else openTitle();
 }
 
+/* ================= ACCESSIBILITY AND COMFORT =================
+   Settings › Accessibility. These options belong to the device, not to a save file: they're kept in
+   localStorage under A11Y_KEY, so a new save file, the title screen and the dev sandbox all keep them.
+   With every option at its default the game looks and plays exactly as before.
+   - Color-blind cues: a fake shot is a hollow dashed ring (a11yFakeShot), danger zones get stripes
+     (a11yZoneCues), a ring hugs an attack in its Perfect window (a11yAttackCues), the Bell Ringer's
+     heavy notes get a ring, and boss instructions name shapes instead of colors (a11yText).
+   - Flashing: off removes full-screen flashes (impacts and ults, the red hit vignette, the
+     Illusionist's eruption) and holds blinking warnings steady. Unset, it follows the system's
+     reduced-motion setting. Any new full-screen flash or strobe should check a11yNoFlash().
+   - Text size: large enlarges menu text (the a11y <style>, html.a11y-text) and small canvas captions
+     (the stage context's font setter below rewrites sizes under 20px as they're set).
+   - Vibration: unset, it follows Sound as it always did; once set it's independent of Sound.
+   - Keyboard: Escape goes back from menus (A11Y_BACK), a menu that opens takes focus so Tab starts
+     inside it, closing it gives focus back to the button that opened it, and Enter on a focused
+     button in the lobby presses the button instead of using the station you stand at. */
+const A11Y_KEY = 'parry-keep-a11y';
+function normalizeA11y(d){                              // anything read back is checked, field by field
+  const o = d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+  return { cues:o.cues === true, flashing:o.flashing === 'on' || o.flashing === 'off' ? o.flashing : null,
+    text:o.text === 'large' ? 'large' : 'normal', vibration:typeof o.vibration === 'boolean' ? o.vibration : null };
+}
+function readA11y(){ try { return normalizeA11y(JSON.parse(localStorage.getItem(A11Y_KEY) || 'null')); } catch(e) { return normalizeA11y(null); } }
+let a11yPrefs = readA11y();
+function saveA11y(){ try { localStorage.setItem(A11Y_KEY, JSON.stringify(a11yPrefs)); } catch(e) {} applyA11y(); }
+const reducedMotionQuery = window.matchMedia ? matchMedia('(prefers-reduced-motion: reduce)') : null;   // read every frame, so made once
+function a11yNoFlash(){ return a11yPrefs.flashing ? a11yPrefs.flashing === 'off' : !!(reducedMotionQuery && reducedMotionQuery.matches); }
+function a11yVibrates(){ return a11yPrefs.vibration == null ? !!meta.sound : a11yPrefs.vibration; }
+function applyA11y(){
+  const root = document.documentElement;
+  root.classList.toggle('a11y-text', a11yPrefs.text === 'large');
+  root.classList.toggle('a11y-noflash', a11yNoFlash());
+}
+try { reducedMotionQuery.addEventListener('change', () => { applyA11y(); if (mode === 'settings' || mode === 'psettings') a11ySettings(); }); } catch(e) {}
+
+// The Settings group. Its buttons get pixel icons like their neighbours.
+const A11Y_ICONS = { 'btn-set-cues':BOON_ICONS.lucky, 'btn-set-flash':ICONS.bolt, 'btn-set-text':BOON_ICONS.quick, 'btn-set-vibrate':BOON_ICONS.heavy };
+for (const id in A11Y_ICONS) if (A11Y_ICONS[id]) { $(id).style.setProperty('--icon-content', "''"); $(id).style.setProperty('--icon-url', `url("data:image/svg+xml,${encodeURIComponent(A11Y_ICONS[id])}")`); }
+let a11yGroupTouched = false;                          // the player opened or closed the group themselves
+$('set-a11y').querySelector('summary').addEventListener('click', () => { a11yGroupTouched = true; });
+function a11ySettings(){
+  $('btn-set-cues').textContent = 'Color-blind cues: ' + (a11yPrefs.cues ? 'on' : 'off');
+  $('btn-set-flash').textContent = 'Flashing: ' + (a11yNoFlash() ? 'off' : 'on');
+  $('btn-set-text').textContent = 'Text size: ' + a11yPrefs.text;
+  $('btn-set-vibrate').textContent = 'Vibration: ' + (a11yVibrates() ? 'on' : 'off');
+  $('btn-set-vibrate').hidden = $('a11y-vibrate-d').hidden = !('vibrate' in navigator);   // e.g. iPhones can't vibrate
+  // open the group when something in it is switched on, until the player opens or closes it themselves
+  if (!a11yGroupTouched && (a11yPrefs.cues || a11yPrefs.text === 'large' || a11yNoFlash() || a11yPrefs.vibration === false)) $('set-a11y').open = true;
+}
+$('btn-set-cues').onclick = () => { a11yPrefs.cues = !a11yPrefs.cues; saveA11y(); a11ySettings(); };
+$('btn-set-flash').onclick = () => { a11yPrefs.flashing = a11yNoFlash() ? 'on' : 'off'; saveA11y(); a11ySettings(); };
+$('btn-set-text').onclick = () => { a11yPrefs.text = a11yPrefs.text === 'large' ? 'normal' : 'large'; saveA11y(); a11ySettings(); };
+$('btn-set-vibrate').onclick = () => { a11yPrefs.vibration = !a11yVibrates(); saveA11y(); a11ySettings(); if (a11yPrefs.vibration) buzz(40); };
+$('btn-set-sound').addEventListener('click', a11ySettings);           // Vibration follows Sound until it's set
+
+// Color-blind cues, drawn on the arena. Stripes cross a danger zone so it reads without its red:
+// path() traces the zone in the current transform and (x, y, w, h) bounds it.
+function a11yStripes(g, path, x, y, w, h){
+  g.save(); g.beginPath(); path(); g.clip(); g.beginPath();
+  for (let s = -h; s < w; s += 11) { g.moveTo(x + s, y + h); g.lineTo(x + s + h, y); }
+  g.globalAlpha = .45; g.lineWidth = 4; g.strokeStyle = '#140d1d'; g.stroke();
+  g.globalAlpha = .6; g.lineWidth = 2; g.strokeStyle = '#ffe9ee'; g.stroke();
+  g.restore();
+}
+// Every ground hazard you must walk out of: the same shapes their red marks use.
+function a11yZoneCues(g){
+  if (!a11yPrefs.cues || !run) return;
+  const circle = (x, y, r) => a11yStripes(g, () => g.arc(x, y, r, 0, Math.PI * 2), x - r, y - r, 2 * r, 2 * r);
+  const rect = (x, y, w, h) => a11yStripes(g, () => g.rect(x, y, w, h), x, y, w, h);
+  const sector = (x, y, r, a, half) => a11yStripes(g, () => { g.moveTo(x, y); g.arc(x, y, r, a - half, a + half); g.closePath(); }, x - r, y - r, 2 * r, 2 * r);
+  g.save(); g.beginPath(); g.ellipse(L.cx, L.cy, L.rx, L.ry, 0, 0, Math.PI * 2); g.clip();
+  const b = run.boss, s = b && !b.dead && b.story;
+  if (s && b.def.kind === 'illusionist' && s.attack === 'divide' && (b.state === 'storywind' || s.zoneFlash > 0)) {
+    const w = 2 * L.rx / 3;
+    for (let i = 0; i < 3; i++) if (i !== s.safe) rect(L.cx - L.rx + i * w, L.cy - L.ry, w, 2 * L.ry);
+  }
+  if (b && !b.dead && b.def.kind === 'pyromaniac') for (const h of pyroState(b).hazards) {
+    if (h.kind === 'lane') rect(h.x - h.w, L.cy - L.ry, 2 * h.w, 2 * L.ry);
+    else if (h.kind === 'bomb') circle(h.x, h.y, h.r);
+    else sector(h.x, h.y, h.r, h.a, h.half);
+  }
+  if (b && !b.dead && b.def.kind === 'ringer' && b.ring && b.state !== 'enter') for (const z of b.ring.dangers || []) {
+    g.save(); g.translate(z.x, z.y); g.rotate(z.ang);
+    if (z.kind === 'burst') circle(0, 0, z.radius); else rect(0, -z.width, z.range, 2 * z.width);
+    g.restore();
+  }
+  if (run.necro && !run.necro.core.dead) for (const h of run.necro.hands || []) circle(h.x, h.y, h.r);
+  for (const z of run.hazards || []) if (z.R > 0 && !z.done && Number.isFinite(z.x) && Number.isFinite(z.y)) circle(z.x, z.y, z.R);
+  for (const p of run.eproj) if (p.lob && !p.dead) circle(p.lob.tx, p.lob.ty, p.lob.R);
+  for (const e of run.enemies) if (!e.dead && e.type === 'firemage' && (e.fire || e.state === 'windup')) {
+    const a = e.fire ? e.fire.ang : e.fireAim;
+    if (a != null) sector(e.x, e.y, e.fire ? e.fire.range : Math.min(260, L.R * 1.3), a, e.fire ? e.fire.half : e.eliteSpecial ? .8 : .6);
+  }
+  g.restore();
+}
+// A fake shot drawn as a hollow, dashed ring (real ones stay solid). True when it drew the shot.
+function a11yFakeShot(g, p){
+  if (!a11yPrefs.cues || !p.fake) return false;
+  const r = p.size || 7, k = cls() === 'oneeyed' ? .3 : 1, dir = Math.atan2(p.vy, p.vx), cx = Math.cos(dir), cy = Math.sin(dir);
+  g.save(); g.lineCap = 'round';
+  g.globalAlpha = .45 * k; g.strokeStyle = p.color; g.lineWidth = 2; g.setLineDash([2, 5]);
+  g.beginPath(); g.moveTo(p.x - cx * r * 4, p.y - cy * r * 4); g.lineTo(p.x - cx * (r + 3), p.y - cy * (r + 3)); g.stroke();
+  g.lineCap = 'butt'; g.setLineDash([4, 3]); g.globalAlpha = k;
+  g.beginPath(); g.arc(p.x, p.y, r + 1, 0, Math.PI * 2); g.lineWidth = 4.5; g.strokeStyle = '#100c18'; g.stroke();
+  g.lineWidth = 2.5; g.strokeStyle = p.color; g.stroke();
+  g.restore(); return true;
+}
+// The Perfect window (the white highlight in drawApproach) also gets a ring around the attack.
+function a11yAttackCues(g){
+  if (!a11yPrefs.cues || !run) return;
+  const tm = timingMul();
+  for (const p of run.eproj) {
+    if (p.dead || p.fake || p.unparryable || p.reflected || p.deflected || p.lob || (p.blink && p.blink.state === 1)) continue;
+    const tc = timeToRing(p); if (tc > PERFW * tm || tc < -LAT) continue;
+    const r = (p.carrier || p.wraithDash ? 20 : p.size || 7) + 7;
+    g.save(); g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2);
+    g.lineWidth = 5; g.strokeStyle = '#100c18'; g.stroke(); g.lineWidth = 2.5; g.strokeStyle = '#fff4d6'; g.stroke(); g.restore();
+  }
+}
+// The Bell Ringer's heavy (gold) notes get a ring; his normal notes don't.
+function a11yHeavyNote(g, x, y, r){
+  if (!a11yPrefs.cues) return;
+  g.save(); g.lineWidth = 1.5; g.strokeStyle = '#fff4d6'; g.beginPath(); g.arc(x, y, r + 2.5, 0, Math.PI * 2); g.stroke(); g.restore();
+}
+// Boss instructions that name a color name the shape instead.
+function a11yText(s){
+  if (!a11yPrefs.cues || typeof s !== 'string') return s;
+  return s.replace('RED IS REAL · BLUE IS AN ILLUSION', 'SOLID IS REAL · HOLLOW IS FAKE').replace(/\bRED SHOTS\b/g, 'SOLID SHOTS')
+    .replace(/\bGOLD: PARRY\b/g, 'FIREBALLS: PARRY').replace(/\bRED (FLOOR|MARKS|CIRCLES)\b/g, 'STRIPED $1');
+}
+// The new enemy/boss card adds a line when its colors have a shape cue.
+const introCueNote = document.createElement('p'); introCueNote.id = 'intro-a11y'; introCueNote.hidden = true; $('intro-text').after(introCueNote);
+function a11yIntroNote(){
+  const t = ($('intro-text').textContent || '').toLowerCase(), notes = [];
+  if (a11yPrefs.cues && /fake|illusion/.test(t)) notes.push('fake shots are hollow, dashed rings');
+  if (a11yPrefs.cues && /circle|lane|floor|cone|third|grave hand|warning mark/.test(t)) notes.push('danger zones are striped');
+  introCueNote.textContent = notes.length ? 'Color-blind cues: ' + notes.join('; ') + '.' : '';
+  introCueNote.hidden = !notes.length;
+}
+
+// Text size: large. Small canvas captions (under 20px) are drawn bigger. Every caption sets its font
+// as "<weight> <size>px Parry Pixel, monospace" on the stage context, so the size is rewritten as it's
+// set; code that measures text sees the new size too. Big titles and banners are left alone.
+const a11yFontProp = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, 'font');
+const a11yFontSize = n => n >= 20 ? n : n < 11 ? n * 1.3 : Math.min(20, n * 1.2);
+if (a11yFontProp && a11yFontProp.set) Object.defineProperty(ctx, 'font', { configurable:true,
+  get(){ return a11yFontProp.get.call(this); },
+  set(v){ a11yFontProp.set.call(this, a11yPrefs.text === 'large' ? String(v).replace(/(\d+(?:\.\d+)?)px/, (m, n) => a11yFontSize(+n) + 'px') : v); } });
+
+// Keyboard. Escape presses a menu's back button; the pause menu already resumes on Escape.
+const A11Y_BACK = { 's-saves':'btn-saves-back', 's-settings':'btn-set-close', 's-diff':'btn-diff-cancel', 's-sanctum':'btn-sanc-start',
+  's-hire':'btn-hire-cancel', 's-custom':'btn-cust-cancel', 's-npc':'btn-npc-close', 's-quests':'btn-q-close', 's-wheel':'btn-wheel-close',
+  's-inv':'btn-inv-close', 's-item':'btn-item-close', 's-level':'btn-lv-close', 's-forge':'btn-forge-close', 's-barracks':'btn-bar-close',
+  's-classes':'btn-cls-close', 's-cls':'btn-cls-back', 's-summon':'btn-sum-ok', 's-companions':'portal-close', 's-practice':'practice-close',
+  's-save-restore':'btn-save-restore-cancel', 's-intro':'btn-intro-ok' };
+const a11yShown = el => !!el && !el.hidden && el.isConnected && el.getClientRects().length > 0;
+function a11yTopScreen(){ let top = null; for (const el of document.querySelectorAll('#app > section.screen')) if (!el.hidden) top = el; return top; }
+function a11yEscape(){
+  if (mode === 'cutscene') { const skip = $('cs-skip'); if (!a11yShown(skip)) return false; skip.click(); return true; }
+  const top = a11yTopScreen(); if (!top) return false;
+  if (top.id === 's-guide') { if (guideFrom === 'first') return false; openTitle(); return true; }
+  const back = own(A11Y_BACK, top.id) ? $(A11Y_BACK[top.id]) : null;
+  if (!a11yShown(back) || back.disabled) return false;
+  back.click(); return true;
+}
+// a11yKeys: the player is using the keyboard. a11yKeyAt: what had focus at the last key press, so the
+// button that opened a menu is known when the menu appears. a11yReturn: that button, while its menu is up.
+let a11yKeys = false, a11yKeyAt = null, a11yTop = null, a11yReturn = null;
+window.addEventListener('pointerdown', () => { a11yKeys = false; a11yKeyAt = null; }, true);
+window.addEventListener('keydown', ev => {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const k = ev.key, el = document.activeElement, typing = !!el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName);
+  if (k === 'Tab' || k === 'Escape' || k === 'Enter' || k === ' ' || k.startsWith('Arrow')) a11yKeys = true;
+  a11yKeyAt = el;
+  if (k === 'Escape') { if (!typing && !ev.repeat && a11yEscape()) { ev.preventDefault(); ev.stopImmediatePropagation(); } return; }
+  const onButton = !!el && el !== document.body && !typing && $('app').contains(el);
+  // Enter presses a focused training-card or cutscene Skip button (Space still parries or moves on),
+  // and presses the training's Next when it shows (that step has no attacks to parry)
+  if (k === 'Enter' && onButton && el.closest('#tut, #cs-skip') && (mode === 'cutscene' || (mode === 'play' && run && run.tut))) { ev.stopImmediatePropagation(); return; }
+  if (k === 'Enter' && mode === 'play' && run && run.tut && !$('tut-next').hidden) { ev.preventDefault(); ev.stopImmediatePropagation(); if (!ev.repeat) $('tut-next').click(); return; }
+  if (mode !== 'lobby' || !onButton) return;
+  if (k === 'Enter' || k === ' ') ev.stopImmediatePropagation();         // press the focused button, not the station
+  else if (MOVE_KEYS.includes(k.toLowerCase())) el.blur();                // walking hands the keys back to the lobby
+}, true);
+// A menu that opens takes focus itself (not its first button, so a stray Space or Enter can't pick a
+// boon); Tab then starts inside it. Closing the last menu gives focus back to the button that opened it.
+function a11yScreensChanged(){
+  applyA11y();
+  const top = a11yTopScreen(), was = a11yTop;
+  if (top === was) return;
+  a11yTop = top;
+  if (top && top.id === 's-settings') a11ySettings();
+  if (top && top.id === 's-intro') a11yIntroNote();
+  if (top && !was) a11yReturn = a11yKeyAt instanceof Element && a11yKeyAt !== document.body && !a11yKeyAt.closest('section.screen') ? a11yKeyAt : null;
+  if (a11yKeys) {
+    if (top) { if (!top.contains(document.activeElement)) { top.tabIndex = -1; top.focus({ preventScroll:true }); } }
+    else if (a11yShown(a11yReturn) && document.activeElement !== a11yReturn) a11yReturn.focus({ preventScroll:true });
+  }
+  if (!top) a11yReturn = null;
+}
+const a11yWatch = new MutationObserver(a11yScreensChanged);
+for (const el of document.querySelectorAll('#app > section.screen')) a11yWatch.observe(el, { attributes:true, attributeFilter:['hidden'] });
+applyA11y();
+
+// How it works › Controls, for touch and keyboard.
+GUIDE.push(`<h2>Controls</h2>
+   <div class="cheat">
+     <div><b>Parry</b><span>Tap anywhere, click, or press Space or a letter key.</span></div>
+     <div><b>Move</b><span>Drag the pad in the bottom-left corner, or use WASD or the arrow keys.</span></div>
+     <div><b>Ult</b><span>Tap its button, or press E, R or Shift.</span></div>
+     <div><b>Second ability</b><span>Tap its button, or press Q.</span></div>
+     <div><b>Super Bro</b><span>Tap the purple button, or press F.</span></div>
+     <div><b>Pause</b><span>The pause button, Esc or P.</span></div>
+     <div><b>Lobby</b><span>Walk up to anything, then tap, or press Space, Enter or E.</span></div>
+     <div><b>Menus</b><span>Tab moves between buttons, Enter or Space presses one, Esc goes back.</span></div>
+   </div>
+   <p class="muted">Settings › Accessibility has color-blind cues, a no-flashing option, larger text and vibration.</p>`);
+
 /* ================= NEW ENEMY CARD ================= */
 function openIntro(type){
   const I = ENEMY_INFO[type];
@@ -8121,6 +8384,7 @@ function drawParryPulses(g){
   }
 }
 function presentationFlash(g){
+  if(a11yNoFlash())return;
   const strength=meta.screenShake==='full'?1:.45;
   const a=Math.min(.13,run.flashAll*.1+run.impactFlash*.13)*strength*(meta.effects==='reduced'?.25:1);
   if(a>0){g.save();g.fillStyle=`rgba(236,245,255,${a})`;g.fillRect(-20,-20,W+40,H+40);g.restore();}
@@ -8179,7 +8443,7 @@ function drawBossHud(g,b){
   let label=P.label;
   if(!(b.phaseCue>0)&&['storywind','storycombo'].includes(b.state))label=({quake:'GROUND BREAKER · PERFECT THE SHOCKWAVE',sweep:'HAMMER SWEEP',feint:'DELAYED SLAM · HOLD YOUR PARRY',barrage:'IRON FURY · FOUR HEAVY SLAMS',divide:'MOVE INTO THE UNMARKED THIRD',copies:'CLONES · RED SHOTS ARE REAL',volley:'VOLLEY · WATCH THE RED SHOTS'})[b.story?.attack]||label;
   if(!(b.phaseCue>0)&&b.state==='pyrocast')label=({lanes:'FIREBREAK · MOVE INTO THE CLEAR LANE',bombs:'CINDER FALL · DODGE THE RED CIRCLES',breath:'FURNACE BREATH · MOVE SIDEWAYS'})[b.pyro?.attack]||label;
-  g.fillText(enter?'APPROACHING':label,W/2,y+28*px,w-10*px);
+  g.fillText(enter?'APPROACHING':a11yText(label),W/2,y+28*px,w-10*px);
   if(b.phaseCue>0){g.strokeStyle=b.def.color;g.lineWidth=2;g.strokeRect(x-2*px,y-3*px,w+4*px,42*px);}g.restore();
 }
 
@@ -8218,9 +8482,10 @@ function drawThreatOutlines(g){
 }
 function drawHostileAttacks(g,t){
   // Harmless fakes never cover a real attack. Friendly projectiles were drawn earlier.
-  for(const p of run.eproj)if(!p.dead&&!p.reflected&&!p.deflected&&p.fake)drawShot(g,p,t);
+  for(const p of run.eproj)if(!p.dead&&!p.reflected&&!p.deflected&&p.fake&&!a11yFakeShot(g,p))drawShot(g,p,t);
   for(const p of run.eproj)if(!p.dead&&!p.reflected&&!p.deflected&&!p.fake)drawShot(g,p,t);
   for(const p of run.eproj)if(!p.dead&&!p.reflected&&!p.deflected&&!p.fake)drawApproach(g,p);
+  a11yAttackCues(g);
 }
 
 const escapeHtml=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

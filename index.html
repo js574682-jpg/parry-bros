@@ -1299,6 +1299,7 @@ body{font-size:16px;line-height:1.5;font-synthesis:none}
       <div class="dots" id="guide-dots"></div>
       <div class="row"><button class="btn ghost" id="btn-guide-back">Back</button><button class="btn primary" id="btn-guide-next">Next</button></div>
       <button class="btn ghost" id="btn-guide-replay" hidden>Replay the training</button>
+      <button class="btn ghost" id="btn-guide-opening" hidden style="--icon-content:'';--icon-url:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Cpath fill='%23111524' d='M1 2h14v13H1z'/%3E%3Cpath fill='%23efbb55' d='M2 3h12v11H2z'/%3E%3Cpath fill='%23111524' d='M2 6h12v1H2zM4 3h2v3H4zM8 3h2v3H8zM12 3h2v3h-2zM6 9h1v4H6zM7 10h1v2H7zM8 10h1v2H8z'/%3E%3C/svg%3E&quot;)">Watch the opening</button>
     </div>
   </section>
 
@@ -5830,6 +5831,7 @@ function drawCutscene(g,t){
   if(shot.sub){g.font='700 18px Parry Pixel, monospace';g.fillStyle='#f4b73e';g.fillText(shot.sub.toUpperCase(),W/2,H*.44+44);}
   g.restore();
   const bar=Math.round(H*.09);g.fillStyle='#000';g.fillRect(0,0,W,bar);g.fillRect(0,H-bar,W,bar);   // letterbox
+  if(shot.over)shot.over(g,t,k);                     // optional: drawn over the letterbox (the opening's captions)
 }
 function drawCutsceneEmbers(g,t){
   for(let i=0;i<40;i++){
@@ -6536,6 +6538,7 @@ function closeSettings(){
   else { mode = 'lobby'; show(); }
 }
 function openLobby(atDoor, keep){
+  if (openingDue()) { playOpening(() => openLobby(atDoor, keep)); return; }   // a new file starts with the opening cutscene
   if (!meta.tutDone && !meta.runs) {                   // brand new: straight into a fight. Your bro gets made after the first climb.
     if (!meta.look) { meta.look = Object.assign({}, DEFAULT_LOOK); meta.freeLook = true; saveMeta(); }
     startTraining('first'); return;
@@ -7507,12 +7510,697 @@ function renderGuide(){
   $('btn-guide-back').disabled = guidePage === 0;
   $('btn-guide-next').textContent = !last ? 'Next' : guideFrom === 'first' ? 'Enter the lobby' : 'Done';
   $('btn-guide-replay').hidden = !(last && guideFrom === 'title');
+  $('btn-guide-opening').hidden = !(guidePage === 0 && (guideFrom === 'title' || guideFrom === 'replay'));
   $('s-guide').scrollTop = 0;
 }
 function guideNext(){
   if (guidePage < GUIDE.length - 1) { guidePage++; sfx.buy(); renderGuide(); return; }
   if (guideFrom === 'first') { meta.tutDone = true; saveMeta(); sfx.clear(); openLobby(false); }
   else openTitle();
+}
+
+/* ================= THE OPENING ================= */
+// The story's first cutscene (docs/STORY.md, "The opening"): the masked Orc King and his silent
+// lieutenant, the Masked Wraith, burn your home and carry off your brother; you train your parry and
+// reach the Tower. It plays once when a new save file starts (openLobby, before the first training)
+// and can be watched again from the Guide. It can be skipped once seen, on this file or on any other
+// file on this device (OPENING_SEEN_KEY).
+// Every shot is drawn in code. Each frame paints a small canvas where one pixel is one art pixel, then
+// scales it up without smoothing, so the whole picture shares the same chunky pixels. Characters reuse
+// the hero sprite (in your file's look), the Wraith sprite and the King's placeholder look (drawKing).
+const OPENING_SEEN_KEY = 'parry-keep-seen-opening';
+const OP = { cv:document.createElement('canvas'), king:document.createElement('canvas'), w:0, h:0, px:1, sky:{}, spr:{}, fired:new Set(), texts:[], flash:0, shake:0, kingErr:false };
+function openingSeenHere(){ try { return localStorage.getItem(OPENING_SEEN_KEY) === '1'; } catch(e) { return false; } }
+const openingSeenInFile = () => own(meta.seen, 'cutscene:opening') && !!meta.seen['cutscene:opening'];
+// a brand-new file (no training and no climbs yet) that hasn't seen the opening
+const openingDue = () => !meta.dev && !meta.tutDone && !meta.runs && !practiceSession && !openingSeenInFile();
+function playOpening(after){
+  const skippable = openingSeenInFile() || openingSeenHere();
+  OP.fired.clear();
+  playCutscene('opening', () => { try { localStorage.setItem(OPENING_SEEN_KEY, '1'); } catch(e) {} if (after) after(); });
+  $('cs-skip').hidden = !skippable;
+}
+$('btn-guide-opening').onclick = () => { audioInit(); const from = guideFrom; playOpening(() => openGuide(from)); };
+// cap: the caption, typed out in the bottom letterbox bar. cut: a hard cut in (the training montage).
+CUTSCENES['opening'] = { shots:[
+  { dur:5,   scene:opHome,    cap:'A quiet valley. A warm home.' },
+  { dur:4.6, scene:opSpar,    cap:'You and your brother. Always sparring.' },
+  { dur:4.8, scene:opMasks,   cap:'Then, one night, the masks came.' },
+  { dur:3.8, scene:opDoor,    name:'The Orc King' },
+  { dur:4.6, scene:opBlaze,   cap:'Your family never stood a chance.' },
+  { dur:5,   scene:opTaken,   cap:'His silent lieutenant took your brother.' },
+  { dur:4.8, scene:opGraves,  cap:'You couldn’t stop them. Not yet.' },
+  { dur:3.4, scene:opLog,     cap:'So you trained your parry.', cut:true },
+  { dur:3.2, scene:opSeasons, cap:'Through every season.', cut:true },
+  { dur:3.6, scene:opStorm,   cap:'Until nothing could touch you.', cut:true },
+  { dur:5.6, scene:opArrive,  cap:'The Tower. Your brother is at the top.' },
+  { dur:3.6, scene:opCard,    title:'Chapter 1', sub:'The Tower', embers:true },
+].map(s => Object.assign(s, { draw:(g, t) => drawOpeningShot(g, t, s), over:g => drawOpeningCaption(g, s) })) };
+
+function drawOpeningShot(g, t, s){
+  const c = cutscene; if (!c) return;
+  const st = c.t, next = CUTSCENES.opening.shots[c.i + 1];
+  const a = clamp(Math.min(s.cut ? 1 : st / .5, next && next.cut ? 1 : (s.dur - st) / .5), 0, 1);
+  const o = opBegin(), F = opFrame();
+  OP.flash = 0; OP.shake = 0; OP.texts = [];
+  s.scene(o, F, st, t);
+  const fl = Math.min(1, OP.flash) * (meta.screenShake === 'full' ? 1 : .45) * (meta.effects === 'reduced' ? .25 : 1);   // like presentationFlash
+  if (fl > 0) { o.globalAlpha = fl; o.fillStyle = '#fff4e2'; o.fillRect(0, 0, F.w, F.h); o.globalAlpha = 1; }
+  const sh = Math.round(OP.shake * shakeScale()), dx = sh ? Math.round(rand(-sh, sh)) * OP.px : 0, dy = sh ? Math.round(rand(-sh, sh)) * OP.px : 0;
+  g.globalAlpha = a; g.imageSmoothingEnabled = false;
+  g.drawImage(OP.cv, dx, dy, OP.w * OP.px, OP.h * OP.px);
+  g.imageSmoothingEnabled = true;
+  if (s.embers) drawCutsceneEmbers(g, t);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (const x of OP.texts) {                           // words that pop over the picture, like PERFECT
+    const fs = x.css / ZOOM; g.globalAlpha = a * x.a; g.font = '800 ' + fs + 'px Parry Pixel, monospace';
+    g.lineWidth = fs * .2; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(x.text, x.x * OP.px, x.y * OP.px);
+    g.fillStyle = x.color; g.fillText(x.text, x.x * OP.px, x.y * OP.px);
+  }
+  g.globalAlpha = a;                                    // drawCutscene's title fades with the shot
+}
+// Drawn over the letterbox: the caption, typed out in the bottom bar, and the King's name card.
+// Returns the caption's layout (the tests check it fits small phones).
+function drawOpeningCaption(g, s){
+  const c = cutscene; if (!c) return null;
+  const st = c.t, next = CUTSCENES.opening.shots[c.i + 1], out = next && next.cut ? 1 : clamp((s.dur - st) / .35, 0, 1);
+  const bar = Math.round(H * .09);
+  let lay = null;
+  g.save(); g.textBaseline = 'middle';
+  if (s.cap) {
+    const maxW = W - 32 / ZOOM; let css = clamp(W * ZOOM / 25, 14, 21), fs, lh, lines;
+    for (;;) {                                          // shrink the text until it fits the bar
+      fs = css / ZOOM; lh = fs * 1.32; g.font = '700 ' + fs + 'px Parry Pixel, monospace';
+      lines = opWrap(g, s.cap, maxW);
+      if (lines.length * lh <= bar - 8 / ZOOM || css <= 11) break;
+      css--;
+    }
+    lay = { lines, fs, lh, bar, maxW, widths:lines.map(l => g.measureText(l).width) };
+    let left = Math.floor(Math.max(0, st - .3) * 40);
+    g.globalAlpha = out; g.fillStyle = '#ece3cf'; g.textAlign = 'left';
+    lines.forEach((ln, i) => {
+      const part = ln.slice(0, Math.max(0, left)); left -= ln.length + 1;
+      if (part) g.fillText(part, W / 2 - lay.widths[i] / 2, H - bar / 2 + (i - (lines.length - 1) / 2) * lh);
+    });
+  }
+  if (s.name && st > 1.45) {
+    const css = clamp(W * ZOOM / 11, 26, 44), fs = css * (1 + Math.max(0, .18 - (st - 1.45)) * 3) / ZOOM, y = bar + (H - 2 * bar) * .15;
+    g.globalAlpha = out; g.textAlign = 'center'; g.font = '800 ' + fs + 'px Parry Pixel, monospace';
+    g.lineWidth = fs * .18; g.strokeStyle = 'rgba(0,0,0,.85)'; g.strokeText(s.name, W / 2, y, W - 24 / ZOOM);
+    g.fillStyle = '#f4b73e'; g.fillText(s.name, W / 2, y, W - 24 / ZOOM);
+  }
+  g.restore();
+  return lay;
+}
+function opWrap(g, text, maxW){
+  const out = []; let line = '';
+  for (const w of text.split(' ')) { const t = line ? line + ' ' + w : w; if (line && g.measureText(t).width > maxW) { out.push(line); line = w; } else line = t; }
+  if (line) out.push(line);
+  return out;
+}
+// a sound that plays once, when the shot reaches `at` seconds
+function opCue(id, at, fn){
+  const c = cutscene; if (!c || c.t < at) return;
+  const key = c.i + ':' + id; if (OP.fired.has(key)) return;
+  OP.fired.add(key); if (c.t - at < .3) { try { fn(); } catch(e) {} }
+}
+
+/* ---- the opening: the pixel canvas and drawing helpers (all sizes in art pixels) ---- */
+function opBegin(){
+  const dev = ZOOM * DPR, want = clamp(Math.min(W / 128, H * .8 / 112), 2, 9);
+  OP.px = Math.max(1, Math.round(want * dev)) / dev;   // a whole number of screen pixels per art pixel
+  const w = Math.ceil(W / OP.px), h = Math.ceil(H / OP.px);
+  if (w !== OP.w || h !== OP.h) { OP.cv.width = OP.w = w; OP.cv.height = OP.h = h; OP.sky = {}; }
+  const o = OP.cv.getContext('2d');
+  o.setTransform(1, 0, 0, 1, 0, 0); o.globalAlpha = 1; o.globalCompositeOperation = 'source-over'; o.imageSmoothingEnabled = false;
+  o.fillStyle = '#05050b'; o.fillRect(0, 0, w, h);
+  return o;
+}
+// the picture between the letterbox bars: gy is the horizon/ground line, fy where the actors stand
+function opFrame(){
+  const w = OP.w, h = OP.h, top = Math.ceil(Math.round(H * .09) / OP.px), bot = h - top, fh = bot - top, tall = h > w * 1.3;
+  const gy = top + Math.round(fh * (tall ? .62 : .7));
+  return { w, h, cx:w >> 1, top, bot, fh, tall, gy, fy:Math.min(bot - 3, gy + Math.round(fh * (tall ? .13 : .19))) };
+}
+const opEase = k => { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); };
+function opR(o, c, x, y, w, h){ o.fillStyle = c; o.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
+function opDisc(o, c, x, y, r){
+  x = Math.round(x); y = Math.round(y); r = Math.max(0, Math.round(r)); o.fillStyle = c;
+  for (let dy = -r; dy <= r; dy++) { const dx = Math.round(Math.sqrt(r * r - dy * dy)); o.fillRect(x - dx, y + dy, dx * 2 + 1, 1); }
+}
+function opGlow(o, c, x, y, r, a){ const was = o.globalAlpha; for (let i = 3; i >= 1; i--) { o.globalAlpha = was * a; opDisc(o, c, x, y, r * i / 3); } o.globalAlpha = was; }
+function opLine(o, c, x0, y0, x1, y1, wd = 1){
+  o.fillStyle = c; const n = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)))), off = wd >> 1;
+  for (let i = 0; i <= n; i++) o.fillRect(Math.round(x0 + (x1 - x0) * i / n) - off, Math.round(y0 + (y1 - y0) * i / n) - off, wd, wd);
+}
+function opRing(o, c, x, y, r){
+  o.fillStyle = c; const n = Math.max(8, Math.round(r * 6.3));
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; o.fillRect(Math.round(x + Math.cos(a) * r), Math.round(y + Math.sin(a) * r), 1, 1); }
+}
+// a sky gradient in dithered bands, built once per screen size
+function opSky(o, id, stops, y0, y1){
+  const key = id + ':' + y0 + ':' + y1; let cv = OP.sky[key];
+  if (!cv) {
+    cv = OP.sky[key] = document.createElement('canvas'); cv.width = OP.w; cv.height = OP.h;
+    const sg = cv.getContext('2d'), img = sg.createImageData(OP.w, OP.h), d = img.data, cols = stops.map(hexToRgb), n = cols.length - 1;
+    for (let y = 0; y < OP.h; y++) {
+      const f = clamp((y - y0) / Math.max(1, y1 - y0), 0, 1) * n;
+      for (let x = 0; x < OP.w; x++) {
+        const c = cols[Math.min(n, Math.floor(f + BAYER[(y & 3) * 4 + (x & 3)] / 16))], i = (y * OP.w + x) * 4;
+        d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+      }
+    }
+    sg.putImageData(img, 0, 0);
+  }
+  o.drawImage(cv, 0, 0);
+}
+const opRidgeY = (x, base, amp, freq, seed) => { const u = x >> 1 << 1; return Math.round(base - amp * (.6 * Math.sin(u * freq + seed) + .4 * Math.sin(u * freq * 2.7 + seed * 1.9))); };
+function opRidge(o, c, base, amp, freq, seed, off = 0){
+  o.fillStyle = c; const sh = Math.round(off);
+  for (let x = 0; x < OP.w; x++) { const y = opRidgeY(x + sh, base, amp, freq, seed); o.fillRect(x, y, 1, OP.h - y); }
+}
+function opStars(o, T, yMax, n, a = 1){
+  for (let i = 0; i < n; i++) {
+    o.globalAlpha = a * (Math.sin(T * (1 + hash2(i, 3) * 2) + i * 1.7) > .4 ? 1 : .4); o.fillStyle = i % 6 ? '#9c9ec6' : '#fff1d7';
+    o.fillRect(Math.floor(hash2(i, 7) * OP.w), Math.floor(hash2(i, 13) * yMax), 1, 1);
+  }
+  o.globalAlpha = 1;
+}
+function opGround(o, F, c, dot, off = 0, y0 = F.gy){
+  opR(o, c, 0, y0, F.w, F.h - y0); o.fillStyle = dot;
+  const n = Math.floor(F.w * Math.max(0, F.h - y0) / 70), sh = Math.round(off), span = F.w + 40;
+  for (let i = 0; i < n; i++) {
+    const x = ((Math.floor(hash2(i, 21) * span) - sh) % span + span) % span - 20, y = y0 + 2 + Math.floor(hash2(i, 37) * (F.h - y0));
+    o.fillRect(x, y, i % 3 ? 1 : 2, 1);
+  }
+}
+function opTufts(o, F, c, n, seed = 0, off = 0, flowers = null){   // grass tufts (and a few flowers) on the ground
+  for (let i = 0; i < n; i++) {
+    const x = Math.round(((hash2(i, 31 + seed) * (F.w + 20) - off) % (F.w + 20) + F.w + 20) % (F.w + 20) - 10), y = Math.round(F.gy + 6 + hash2(i, 33 + seed) * (F.bot - F.gy - 8));
+    o.fillStyle = c; o.fillRect(x, y - 2, 1, 2); o.fillRect(x + 1, y - 3, 1, 3); o.fillRect(x + 2, y - 1, 1, 1);
+    if (flowers && i % 4 === 0) { o.fillStyle = flowers[i % flowers.length]; o.fillRect(x + 1, y - 4, 1, 1); }
+  }
+}
+function opCloud(o, c, x, y, w){ x = Math.round(x); y = Math.round(y); w = Math.round(w); opR(o, c, x, y, w, 3); opR(o, c, x + 3, y - 2, w - 7, 2); opR(o, c, x + Math.round(w * .25), y - 4, Math.round(w * .35), 2); }
+function opPine(o, c, x, gy, hgt){ x = Math.round(x); gy = Math.round(gy); for (let r = 0; r < hgt; r++) { const hw = Math.max(0, Math.floor(r * .4) - (r % 3 === 2 ? 1 : 0)); opR(o, c, x - hw, gy - hgt + r, hw * 2 + 1, 1); } }
+// a round leafy tree; c = its dark, mid and light leaves
+function opTree(o, x, gy, T, c = ['#121c1a', '#1b2a24', '#26392d'], u = 1){
+  x = Math.round(x); const sway = Math.round(Math.sin(T * 1.3 + x) * .6);
+  opR(o, '#24181a', x - 2 * u, gy - 14 * u, 4 * u, 14 * u);
+  opDisc(o, c[0], x + sway, gy - 22 * u, 11 * u); opDisc(o, c[1], x - 2 * u + sway, gy - 24 * u, 8 * u); opDisc(o, c[2], x - 4 * u + sway, gy - 27 * u, 4 * u);
+}
+function opFence(o, x, y, n){ for (let i = 0; i < n; i++) opR(o, '#2e2220', x + i * 7, y - 8, 2, 8); opR(o, '#2e2220', x, y - 6, (n - 1) * 7 + 2, 1); opR(o, '#2e2220', x, y - 3, (n - 1) * 7 + 2, 1); }
+function opFireflies(o, F, T, off = 0){
+  for (let i = 0; i < 10; i++) {
+    if (Math.sin(T * 2.3 + i * 2.1) < .1) continue;
+    opR(o, '#e8f08c', hash2(i, 51) * F.w + Math.sin(T * .7 + i) * 6 - off * .9, F.gy - 6 + hash2(i, 52) * 30 + Math.sin(T * .9 + i * 3) * 3, 1, 1);
+  }
+}
+function opSmoke(o, x, base, T, n, rise, c, drift = 10, size = 1){
+  for (let i = 0; i < n; i++) {
+    const ph = (T * .09 + i / n) % 1;
+    o.globalAlpha = .55 * (1 - ph) * Math.min(1, ph * 5);
+    opDisc(o, c, x + Math.sin(i * 1.9 + T * .5) * 2 + ph * drift, base - ph * rise, (2 + ph * 7) * size);
+  }
+  o.globalAlpha = 1;
+}
+// flames along a base line (a number, or a function of x), flickering at 12 frames a second
+function opFire(o, x0, x1, base, ht, T, seed = 0){
+  const tq = Math.floor(T * 12) / 12, span = Math.max(1, x1 - x0), at = x => typeof base === 'function' ? base(x) : base;
+  for (let x = Math.round(x0); x < x1; x++) {
+    const e = Math.max(0, Math.min(x - x0, x1 - 1 - x) / (span / 2)), by = at(x);
+    const hh = Math.max(1, Math.round(ht * (.55 + .25 * Math.sin(x * .9 + tq * 9 + seed) + .2 * Math.sin(x * 2.3 - tq * 13 + seed * 3)) * (.3 + .7 * Math.sqrt(e))));
+    o.fillStyle = '#7e2618'; o.fillRect(x, by - hh, 1, hh);
+    o.fillStyle = '#e0602a'; o.fillRect(x, by - Math.round(hh * .78), 1, Math.round(hh * .78));
+    o.fillStyle = '#ffb13d'; o.fillRect(x, by - Math.round(hh * .5), 1, Math.round(hh * .5));
+    o.fillStyle = '#ffe39a'; o.fillRect(x, by - Math.round(hh * .22), 1, Math.round(hh * .22));
+  }
+  for (let i = 0; i < span / 4; i++) {                 // loose tongues of flame
+    const ph = (T * 1.7 + hash2(i, seed + 5)) % 1, x = x0 + hash2(i, seed + 9) * span, sz = ph < .5 ? 2 : 1;
+    opR(o, ph < .4 ? '#ffb13d' : ph < .75 ? '#e0602a' : '#7e2618', x + Math.sin(T * 5 + i) * 1.5, at(Math.round(x)) - ht * (.6 + ph * .9), sz, sz);
+  }
+}
+function opEmbers(o, x0, x1, base, rise, T, n, seed = 0){
+  for (let i = 0; i < n; i++) {
+    const ph = (T * (.12 + hash2(i, seed + 3) * .18) + hash2(i, seed + 4)) % 1;
+    o.globalAlpha = 1 - ph * .8; o.fillStyle = ph < .4 ? '#ffe39a' : ph < .7 ? '#ffb13d' : '#e0602a';
+    o.fillRect(Math.round(x0 + hash2(i, seed + 2) * (x1 - x0) + Math.sin(T * 1.7 + i) * 5 * ph), Math.round(base - ph * rise), 1, 1);
+  }
+  o.globalAlpha = 1;
+}
+function opBolt(o, x, y0, y1, seed){
+  let px = Math.round(x), py = Math.round(y0);
+  while (py < y1) { const ny = py + 4 + Math.floor(hash2(py, seed) * 5), nx = px + Math.round((hash2(py, seed + 1) - .5) * 10); opLine(o, '#fff6c8', px, py, nx, ny); px = nx; py = ny; }
+}
+function opTorch(o, x, y, T, i = 0){
+  x = Math.round(x); y = Math.round(y); const f = Math.floor(T * 10 + i * 3) % 3;
+  opGlow(o, '#ff9a4a', x, y - 9, 8, .07);
+  opR(o, '#2a1d14', x, y - 8, 1, 8);
+  opR(o, '#e0602a', x - 1, y - 10, 3, 2); opR(o, '#ffb13d', x - 1 + (f & 1), y - 12, 2, 2); opR(o, '#ffe39a', x, y - 13 - (f === 2 ? 1 : 0), 1, 2);
+}
+// the family home: timber and plaster under a straw roof. st: 'home' (lit, chimney smoke), 'night' (your
+// family at the window), 'fire' or 'ruin'. u: pixel size.
+function opHouse(o, x, gy, st, T, u = 1){
+  x = Math.round(x); gy = Math.round(gy);
+  const R = (c, a, b, w, h) => opR(o, c, x + a * u, gy + b * u, w * u, h * u);
+  if (st === 'ruin') {
+    R('#141018', -25, -2, 50, 2);
+    for (const [a, h] of [[-23, 16], [-9, 21], [8, 12], [21, 18]]) { R('#141018', a, -h, 3, h); R('#2a2026', a + 1, -h + 1, 1, h - 2); }
+    R('#141018', -23, -14, 17, 2); R('#141018', 7, -9, 17, 2); R('#141018', -27, -4, 10, 2);
+    opSmoke(o, x - 4 * u, gy - 16 * u, T, 5, 40 * u, '#5a5466', 6, u * .6);
+    return;
+  }
+  const fire = st === 'fire', lit = fire ? (Math.floor(T * 12) % 2 ? '#ffb13d' : '#ff7a2d') : '#ffd27a';
+  if (!fire) for (const a of [-15, 15]) opGlow(o, '#ffcf70', x + a * u, gy - 13 * u, 12 * u, .05);
+  R('#1c1418', -24, -23, 48, 23);
+  R(fire ? '#4a3434' : '#6e5b52', -23, -22, 46, 22);
+  R(fire ? '#3a2a2c' : '#594842', -23, -6, 46, 6);
+  for (const a of [-23, -9, 8, 21]) R('#35251f', a, -22, 2, 22);
+  R('#35251f', -23, -22, 46, 2);
+  for (const a of [-19, 12]) {                         // windows
+    R('#1c1418', a - 1, -17, 9, 8); R(lit, a, -16, 7, 6);
+    if (st === 'night' && a < 0) { R('#2a1c1c', a + 1, -14, 2, 4); R('#2a1c1c', a + 4, -15, 2, 5); }   // your family, at home
+    R('#4a3020', a + 3, -16, 1, 6); R('#4a3020', a, -14, 7, 1);
+  }
+  R('#1c1418', -5, -15, 10, 15);
+  if (fire) R(lit, -4, -14, 8, 14);                    // the door is gone
+  else { R('#5a3a24', -4, -14, 8, 14); R('#3e2818', -1, -14, 1, 14); R('#c79a4a', 2, -8, 1, 1); }
+  for (let r = 0; r < 20; r++) { const hw = 28 - Math.round(r * 1.25); R(fire ? (r % 3 ? '#2e1c18' : '#3e2418') : r % 3 ? '#9a7a3a' : '#7a5a2a', -hw, -23 - r, hw * 2, 1); }
+  R('#1c1418', -28, -23, 56, 1);
+  R('#1c1418', 11, -44, 7, 13); R('#4c4456', 12, -43, 5, 12);   // chimney
+  if (!fire) opSmoke(o, x + 14 * u, gy - 46 * u, T, 6, 40 * u, st === 'home' ? '#6a5a70' : '#2a2840', 10 * u, u * .5);
+}
+const opRoofY = (x, hx, gy, u) => Math.round(gy - (23 + clamp((28 - Math.abs(x - hx) / u) / 1.25, 0, 19)) * u);
+// the Tower: dark stone in tiers, slit windows (a few lit), battlements, a spire, and a red light at the top
+function opTower(o, x, gy, hgt, wid, T, door = true){
+  x = Math.round(x); gy = Math.round(gy);
+  const tiers = 6, th = hgt / tiers;
+  for (let i = 0; i < tiers; i++) {
+    const w = Math.round(wid * (1 - i * .06)), hw = w >> 1, y1 = Math.round(gy - i * th), y0 = Math.round(gy - (i + 1) * th), e = Math.max(2, w >> 3);
+    opR(o, '#0c0a14', x - hw - 1, y0, w + 2, y1 - y0);
+    opR(o, '#221c31', x - hw, y0, w, y1 - y0);
+    opR(o, '#2f2744', x - hw, y0, e, y1 - y0);
+    opR(o, '#16121f', x + hw - e, y0, e, y1 - y0);
+    for (let yy = y0 + 6; yy < y1 - 2; yy += 6) opR(o, '#1a1526', x - hw + e, yy, w - 2 * e, 1);
+    opR(o, '#0c0a14', x - hw - 3, y1 - 3, w + 6, 3); opR(o, '#3a3150', x - hw - 3, y1 - 3, w + 6, 1);
+    for (let j = -1; j <= 1; j += 2) {
+      const on = hash2(i, j + 40) < .45 && Math.sin(T * 1.7 + i * 2.3 + j) > -.5;
+      opR(o, on ? '#ffb35a' : '#08070e', x + j * Math.round(w * .22) - 1, y0 + Math.round(th * .3), 2, Math.max(3, Math.round(th * .22)));
+    }
+  }
+  const top = Math.round(gy - hgt), tw = Math.round(wid * (1 - (tiers - 1) * .06)), hw = tw >> 1;
+  for (let i = -hw; i <= hw - 2; i += 4) opR(o, '#221c31', x + i, top - 4, 3, 4);
+  opR(o, '#0c0a14', x - hw - 3, top - 1, tw + 6, 2);
+  for (let r = 0; r < 18; r++) { const w2 = Math.round((hw + 2) * (1 - r / 18)); opR(o, r % 5 ? '#241b33' : '#120e1c', x - w2, top - 5 - r, w2 * 2 + 1, 1); }
+  opGlow(o, '#ff3a4a', x, top + 6, 12 + Math.round(Math.sin(T * 3) * 2), .1);
+  opR(o, '#ff4a5a', x - 2, top + 3, 4, 6); opR(o, '#ffd0c0', x - 1, top + 5, 2, 2);
+  // the cult's banner down the upper tiers: a bone mask on purple
+  const by = Math.round(top + th * .55), bl = Math.round(th * 1.6), bx = x - Math.round(tw * .32), sway = Math.round(Math.sin(T * 1.6));
+  opR(o, '#0c0a14', bx - 4, by - 1, 9, 2);
+  for (let r = 0; r < bl; r++) opR(o, r % 7 === 6 ? '#3b2340' : '#56315b', bx - 3 + (r > bl * .6 ? sway : 0), by + r, 7 - (r > bl - 3 ? (bl - r) % 2 * 2 : 0), 1);
+  opR(o, '#e8dcc0', bx - 1, by + 4, 3, 3); opR(o, '#1a1020', bx - 1, by + 5, 1, 1); opR(o, '#1a1020', bx + 1, by + 5, 1, 1);
+  if (door) {
+    for (let i = 0; i < 3; i++) opR(o, i % 2 ? '#2a2236' : '#1e1828', x - 12 - i * 3, gy + i * 2, 24 + i * 6, 2);   // steps
+    opR(o, '#06050a', x - 6, gy - 16, 12, 16); opR(o, '#06050a', x - 4, gy - 18, 8, 2);
+    opR(o, '#3a3150', x - 7, gy - 17, 1, 17); opR(o, '#3a3150', x + 6, gy - 17, 1, 17);
+    opTorch(o, x - 11, gy - 5, T, 1); opTorch(o, x + 11, gy - 5, T, 2);
+  }
+}
+function opTowerFar(o, x, by, T, u = 1){
+  x = Math.round(x); by = Math.round(by); const c = '#1a1426';
+  opR(o, c, x - 2 * u, by - 18 * u, 4 * u + 1, 18 * u);
+  opR(o, c, x - 3 * u, by - 20 * u, 6 * u + 1, 2 * u);
+  for (let r = 0; r < 5 * u; r++) { const hw = Math.round((5 * u - r) * .55); opR(o, c, x - hw, by - 20 * u - r, hw * 2 + 1, 1); }
+  if (Math.sin(T * 2.4) > -.5) { opGlow(o, '#ff4a5a', x, by - 17 * u, 3 * u, .12); opR(o, '#ff4a5a', x, by - 17 * u, 1, u); }
+}
+function opGrave(o, x, y, flower){
+  x = Math.round(x); y = Math.round(y);
+  for (let r = 0; r < 6; r++) { const hw = Math.round(12 * Math.sqrt(1 - (r / 6) ** 2)); opR(o, r === 5 ? '#4e3e36' : '#3a2e2a', x - hw, y - r - 1, hw * 2, 1); }
+  opR(o, '#2a1d14', x - 2, y - 21, 4, 16); opR(o, '#6b4a2e', x - 1, y - 20, 2, 15);
+  opR(o, '#2a1d14', x - 6, y - 17, 12, 4); opR(o, '#6b4a2e', x - 5, y - 16, 10, 2);
+  opR(o, '#3f6a3a', x + 6, y - 3, 1, 2); opR(o, flower, x + 5, y - 5, 3, 1); opR(o, flower, x + 6, y - 6, 1, 3);
+}
+function opRock(o, x, y){ x = Math.round(x); y = Math.round(y); opR(o, '#15162a', x - 2, y - 2, 5, 5); opR(o, '#8a8a96', x - 1, y - 1, 3, 3); opR(o, '#c4c4ce', x - 1, y - 1, 1, 1); }
+function opArrow(o, x, y, a, len = 8, wd = 1, head = '#d8dce8'){
+  const dx = Math.cos(a), dy = Math.sin(a);
+  opLine(o, '#8a6a4a', x - dx * len, y - dy * len, x, y, wd);
+  opLine(o, '#e8e0d0', x - dx * len - dy * 2, y - dy * len + dx * 2, x - dx * (len - 2) + dy * 2, y - dy * (len - 2) - dx * 2);
+  opR(o, head, x - 1, y - 1, 2 + wd - 1, 2 + wd - 1);
+}
+function opSpark(o, x, y, r, c = '#ffd84a'){
+  x = Math.round(x); y = Math.round(y);
+  opR(o, c, x - r, y, r * 2 + 1, 1); opR(o, c, x, y - r, 1, r * 2 + 1);
+  const d = Math.round(r * .6); opLine(o, c, x - d, y - d, x + d, y + d); opLine(o, c, x - d, y + d, x + d, y - d);
+  opR(o, '#ffffff', x - 1, y - 1, 3, 3);
+}
+// a blade held at (x, y) pointing along a: the practice stick, or a real steel sword
+function opBlade(o, x, y, a, len, steel, u = 1){
+  const dx = Math.cos(a), dy = Math.sin(a), bx = x - dx * 3 * u, by = y - dy * 3 * u, ex = x + dx * len, ey = y + dy * len;
+  const gx = x - dy * (steel ? 3 : 2) * u, gy = y + dx * (steel ? 3 : 2) * u, hx = x + dy * (steel ? 3 : 2) * u, hy = y - dx * (steel ? 3 : 2) * u;
+  opLine(o, '#15162a', bx, by, ex, ey, u + 2); opLine(o, '#15162a', gx, gy, hx, hy, u + 2);
+  if (steel) { opLine(o, '#6b4a2e', bx, by, x, y, u); opLine(o, '#e8ecff', x + dx * u, y + dy * u, ex, ey, u); opLine(o, '#f4b73e', gx, gy, hx, hy, u); }
+  else { opLine(o, '#a8723a', bx, by, ex, ey, u); opLine(o, '#6b4a2e', gx, gy, hx, hy, u); }
+}
+
+/* ---- the opening: characters ---- */
+function opSprite(id, rows, pal){
+  let s = OP.spr[id];
+  if (!s) {
+    s = OP.spr[id] = document.createElement('canvas'); s.width = rows[0].length; s.height = rows.length;
+    const sg = s.getContext('2d');
+    rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) { const ch = r[x]; if (ch !== '.' && ch !== ' ') { sg.fillStyle = pal[ch] || '#ff00ff'; sg.fillRect(x, y, 1, 1); } } });
+  }
+  return s;
+}
+// a sprite standing on (x, y), drawn k whole pixels per art pixel
+function opPut(o, s, x, y, k = 1, alpha = 1){
+  const w = s.width * k, h = s.height * k, was = o.globalAlpha;
+  o.globalAlpha = was * alpha; o.drawImage(s, Math.round(x - w / 2), Math.round(y - h), w, h); o.globalAlpha = was;
+}
+function opTurn(rows, cw){                              // a quarter turn: cw puts the head on the right
+  const h = rows.length, w = rows[0].length, out = [];
+  for (let x = 0; x < w; x++) { let r = ''; for (let y = 0; y < h; y++) r += cw ? rows[h - 1 - y][x] : rows[y][w - 1 - x]; out.push(r); }
+  return out;
+}
+const OP_KNEEL = ['...owwwwwwggo...', '..owwwo..owggo..', '.obbbbo..obbbo..'];
+const OP_CULTIST = ['..ooo..', '.okkko.', 'okmmmko', 'okemeko', 'okmmmko', '.okkko.', 'okkkkko', 'okkkkko', 'okkrkko', 'okkkkko', 'okkkkko', '.o.o.o.'];
+const OP_CULT_PAL = { o:'#07060c', k:'#221d2e', m:'#cfc6b4', e:'#07060c', r:'#3a2f48' };
+const OP_GHOST_PAL = Object.fromEntries(Object.keys(WRAITH_PAL).map(k => [k, '#8f7bff']));
+// you (in this file's look) or your brother (your colouring, another haircut and outfit).
+// pose: 'stand', 'kneel', 'downL' / 'downR' (lying, head to the left / right)
+function opBody(who, pose = 'stand'){
+  const h = lookOf(meta.look), look = who === 'bro' ? { skin:h.skin, style:h.style === 2 ? 0 : 2, hair:h.hair, outfit:h.outfit === 2 ? 1 : 2 } : h;
+  const id = who + ':' + pose + ':' + look.skin + look.style + look.hair + look.outfit;
+  if (OP.spr[id]) return OP.spr[id];
+  let rows = heroRows(look);
+  if (pose === 'kneel') rows = rows.slice(0, 14).concat(OP_KNEEL);
+  else if (pose === 'downL') rows = opTurn(rows, false);
+  else if (pose === 'downR') rows = opTurn(rows, true);
+  return opSprite(id, rows, heroPal(look));
+}
+// a fighter with a blade circling them, like in the arena: a = the blade's angle, k = sprite scale
+function opFighter(o, who, x, fy, a, k, steel){
+  const ox = x + Math.cos(a) * 4 * k, oy = fy - 11 * k + Math.sin(a) * 4 * k, behind = Math.sin(a) < -.15;
+  if (behind) opBlade(o, ox, oy, a, 10 * k, steel, k);
+  opPut(o, opBody(who), x, fy, k);
+  if (!behind) opBlade(o, ox, oy, a, 10 * k, steel, k);
+}
+// The Orc King, drawn by drawKing (his placeholder look, so new art shows up here too) on a bigger
+// scratch canvas, then sampled down to art pixels without smoothing. (x, y): his feet; s: art pixels
+// per arena unit (1 / 2.3 matches the hero sprite). opt: state, pose, side (as in drawKing), dark (a tint).
+function opKing(o, x, y, s, T, opt = {}){
+  const R = 3, L0 = 90, T0 = 140, cw = Math.ceil(220 * s) * R, ch = Math.ceil(190 * s) * R, cv = OP.king;
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  const kg = cv.getContext('2d'); kg.setTransform(1, 0, 0, 1, 0, 0); kg.clearRect(0, 0, cw, ch);
+  kg.setTransform(s * R, 0, 0, s * R, L0 * s * R, (T0 - 44) * s * R);   // his middle is 44 units above his feet
+  const b = { x:0, y:0, bob:0, state:opt.state || 'idle', flash:0, def:{ color:'#d9944a' }, king:Object.assign(kingInit(), { pose:opt.pose || 0, side:opt.side || 1 }) };
+  try { drawKing(kg, b, T, {}); }
+  catch (e) { if (!OP.kingErr) { OP.kingErr = true; console.error('Opening: drawKing failed', e); } }
+  kg.setTransform(1, 0, 0, 1, 0, 0);
+  if (opt.dark) { kg.globalCompositeOperation = 'source-atop'; kg.fillStyle = opt.dark; kg.fillRect(0, 0, cw, ch); kg.globalCompositeOperation = 'source-over'; }
+  o.drawImage(cv, Math.round(x - L0 * s), Math.round(y - T0 * s), cw / R, ch / R);
+}
+
+/* ---- the opening: the shots. Each paints (o, F = opFrame(), st = seconds into the shot, T = clock) ---- */
+const OP_DUSK = ['#141127', '#231a38', '#3a2444', '#5c3048', '#8a4249', '#b95c4b', '#d98551'];
+const OP_NIGHT = ['#05050b', '#090a17', '#0e1024', '#151732', '#1d1d3c'];
+function opHome(o, F, st, T){                           // dusk over the valley; home
+  const cam = lerp(-8, 8, opEase(st / 5)), cx = F.cx, hx = cx + 12;
+  opSky(o, 'dusk', OP_DUSK, F.top, F.gy - 8);
+  opStars(o, T, F.top + (F.gy - F.top) * .45, 26, .5);
+  const sx = cx + 30 - cam * .15, sy = F.gy - 18;
+  opGlow(o, '#ff9a55', sx, sy, 32, .05); opDisc(o, '#f2a35c', sx, sy, 9); opDisc(o, '#f8c47e', sx - 2, sy - 2, 4);
+  opRidge(o, '#3a2745', F.gy - 18, 7, .045, 1, cam * .2);
+  const tX = cx - 54; opTowerFar(o, tX - cam * .2, opRidgeY(tX, F.gy - 18, 7, .045, 1) + 3, T);   // far off, the Tower
+  opRidge(o, '#2a2037', F.gy - 8, 5, .07, 4, cam * .45);
+  for (let X = -24; X < F.w + 30; X += 19) opPine(o, '#201a2d', X - cam * .45, opRidgeY(X, F.gy - 8, 5, .07, 4) + 2, 7 + (X * 7 & 3));
+  opGround(o, F, '#1a2321', '#243128', cam);
+  for (let y = F.gy + 3; y < F.bot; y++) { const k = (y - F.gy) / Math.max(1, F.bot - F.gy), hw = 3 + k * 12; opR(o, '#2a2824', hx - cam - hw - k * k * 16, y, hw * 2, 1); }
+  opTufts(o, F, '#2c3b2e', Math.round(F.w * .3), 0, cam, ['#c86a8a', '#e8d27a', '#9a8ad8']);
+  opTree(o, cx - 32 - cam, F.gy + 2, T);
+  opHouse(o, hx - cam, F.gy + 3, 'home', T);
+  opFence(o, cx + 42 - cam, F.gy + 6, 4);
+  opFireflies(o, F, T, cam);
+  opCue('chord', .15, () => { tone(196, 2.2, 'sine', .05); tone(294, 2, 'sine', .035, .2); tone(392, 1.8, 'triangle', .02, .4); });
+}
+function opSpar(o, F, st, T){                           // you and your brother, sparring with sticks
+  const cx = F.cx, fy = F.fy, hx = cx - 20, bx = cx + 20, C = { x:cx, y:fy - 44 };
+  opSky(o, 'dusk', OP_DUSK, F.top, F.gy - 8);
+  opStars(o, T, F.top + (F.gy - F.top) * .4, 22, .5);
+  opRidge(o, '#3a2745', F.gy - 18, 7, .045, 1, 40);
+  opRidge(o, '#2a2037', F.gy - 8, 5, .07, 4, 60);
+  opGround(o, F, '#1a2321', '#243128', 20);
+  opTufts(o, F, '#2c3b2e', Math.round(F.w * .3), 3, 0, ['#c86a8a', '#e8d27a']);
+  opHouse(o, cx - 40, F.gy + 3, 'home', T);
+  opTree(o, cx + 46, F.gy + 3, T);
+  const aH = Math.atan2(C.y - (fy - 22), C.x - hx), aB = Math.atan2(C.y - (fy - 22), C.x - bx);
+  let ha = -.15, ba = -3, step = 0, spark = -1;
+  for (const tc of [1.3, 3.05]) {                      // your brother swings; you parry
+    const d = st - tc;
+    if (d > -.5 && d < .55) {
+      ba = d < -.14 ? lerp(-3, -1.75, opEase((d + .5) / .36)) : d < 0 ? lerp(-1.75, aB, (d + .14) / .14) : lerp(aB, -3, opEase(d / .55));
+      ha = d < -.1 ? -.15 : d < 0 ? lerp(-.15, aH, (d + .1) / .1) : lerp(aH, -.15, opEase(d / .55));
+      if (d > 0) step = Math.round(3 * Math.sin(Math.min(1, d / .45) * Math.PI));
+      if (d >= 0 && d < .18) spark = d;
+    }
+    opCue('clack' + tc, tc, () => { noise(.05, 1700, .22); tone(560, .05, 'square', .05); tone(380, .08, 'triangle', .06, .02); });
+  }
+  const bob = i => Math.floor(T * 3 + i) % 2;
+  opFighter(o, 'hero', hx, fy - bob(0), ha, 2, false);
+  opFighter(o, 'bro', bx + step, fy - bob(1), ba, 2, false);
+  if (spark >= 0) opSpark(o, C.x, C.y, spark < .08 ? 6 : 3);
+}
+function opMasks(o, F, st, T){                          // night: torches and masks on the ridge above your home
+  const cx = F.cx, ry = F.top + Math.round(F.fh * (F.tall ? .4 : .38)), rid = x => opRidgeY(x, ry, 3, .05, 2);
+  opSky(o, 'night', OP_NIGHT, F.top, F.gy);
+  opStars(o, T, ry, 60, 1);
+  const mx = cx + Math.round(F.w * .3), my = F.top + Math.round(F.fh * .13);
+  opGlow(o, '#b8b8e0', mx, my, 18, .05); opDisc(o, '#d8d6e8', mx, my, 6); opDisc(o, '#bcbad2', mx + 2, my - 1, 2); opR(o, '#bcbad2', mx - 3, my + 2, 2, 1);
+  opCloud(o, '#1b1b36', mx - 22 + st * 3, my + 3, 26);
+  // the cult crests the ridge, torch by torch; then the King and his lieutenant
+  const kx = cx - 4, wx = cx - 28, ky = rid(kx) + 2 + Math.round((1 - opEase((st - 1.3) / .9)) * 44), wy = rid(wx) + 2 + Math.round((1 - opEase((st - 1.5) / .9)) * 30);
+  const spots = [];
+  for (let x = 6; x < F.w - 3; x += 14) if (x < wx - 12 || x > kx + 22) spots.push(x);
+  spots.forEach((x, i) => {
+    const at = .3 + i * .16; if (st < at) return;
+    const y = rid(x) + 3 + Math.round((1 - opEase((st - at) / .5)) * 16);
+    opPut(o, opSprite('cultist', OP_CULTIST, OP_CULT_PAL), x, y, 1); if (i % 2 === 0) opTorch(o, x + 4, y - 3, T, i);
+  });
+  opKing(o, kx, ky, 1 / 2.3, T, { dark:'rgba(8,6,18,.45)' });
+  opPut(o, opSprite('wraith', WRAITH_PX, WRAITH_PAL), wx, wy, 1);
+  opRidge(o, '#0a0a15', ry, 3, .05, 2);
+  opGround(o, F, '#0c0e18', '#151829', 0);
+  opHouse(o, cx + 26, Math.max(F.gy + 4, ry + 52), 'night', T);
+  if (st > 2.6 && st < 2.95) opSpark(o, kx + 2, ky - 35, 2, '#ffffff');   // the masks catch the moonlight
+  if (st > 2.8 && st < 3.15) opSpark(o, wx, wy - 19, 1, '#ffffff');
+  opCue('drone', .2, () => { tone(55, 3.6, 'sawtooth', .035, 0, 49); tone(82, 3, 'sine', .05); });
+  opCue('horn', 1.3, () => { tone(98, 1.6, 'triangle', .07, 0, 92); tone(147, 1.4, 'triangle', .04, .1); });
+}
+function opDoor(o, F, st, T){                           // the King comes to your door
+  const s = Math.min(F.w / 170, F.fh * .62 / 104), u = Math.max(1, Math.round(s * 3)), cx = F.cx, gy = F.bot - Math.round(F.fh * .1), kx0 = cx - 40 * s;
+  opR(o, '#2c2536', 0, 0, F.w, F.h);                   // the front wall by moonlight: plaster and dark timbers
+  o.fillStyle = '#332b3e'; for (let i = 0; i < F.w * F.h / 40; i++) o.fillRect(Math.floor(hash2(i, 55) * F.w), Math.floor(hash2(i, 56) * F.h), 2, 1);
+  for (let y = gy - 4 * u; y > -8 * u; y -= 15 * u) opR(o, '#1a1420', 0, y, F.w, 2 * u);
+  for (let x = cx % (26 * u) - 26 * u; x < F.w; x += 26 * u) opR(o, '#1a1420', x, 0, 2 * u, gy);
+  for (let i = 0; i < 6; i++) opR(o, i % 2 ? '#3a2c1c' : '#2c2014', 0, F.top - 2 * u + i * u, F.w, u);   // straw eaves
+  opR(o, '#0d0c16', 0, gy, F.w, F.h - gy);
+  const dw = Math.round(46 * s), dh = Math.round(88 * s), dx = Math.round(kx0 + 101 * s - dw / 2), dTop = gy - dh, d = st - 1.42;
+  opR(o, '#140d0c', dx - u, dTop - u, dw + 2 * u, dh + u);
+  if (d < 0) {                                          // the door, light showing underneath
+    opR(o, '#4a3020', dx, dTop, dw, dh);
+    for (let i = 1; i < 4; i++) opR(o, '#2e1d12', dx + Math.round(dw * i / 4), dTop, 1, dh);
+    opR(o, '#26262e', dx, dTop + Math.round(dh * .22), dw, u); opR(o, '#26262e', dx, dTop + Math.round(dh * .72), dw, u);
+    opR(o, '#c79a4a', dx + dw - 3 * u, dTop + Math.round(dh * .5), u, u);
+    opR(o, '#ffcf70', dx, gy - 1, dw, 1);
+  } else {                                              // smashed in: the room beyond is lit, your family stands in the light
+    opR(o, Math.floor(T * 10) % 2 ? '#ffcf70' : '#ffc060', dx, dTop, dw, dh);
+    opR(o, '#e8a850', dx, dTop + Math.round(dh * .72), dw, dh - Math.round(dh * .72));
+    const k = Math.max(1, Math.round(s * 1.6));
+    for (const [ox, hgt] of [[-7, 24], [6, 22]]) {
+      const fx = Math.round(dx + dw / 2 + ox * k), top = gy - hgt * k;
+      opR(o, '#22161a', fx - 2 * k, top, 4 * k, 4 * k); opR(o, '#22161a', fx - 4 * k, top + 4 * k, 8 * k, (hgt - 4) * k);
+    }
+    opR(o, '#4a3020', dx, dTop, Math.round(dw * .22), Math.round(dh * .4)); opR(o, '#4a3020', dx + dw - Math.round(dw * .16), dTop + Math.round(dh * .5), Math.round(dw * .16), Math.round(dh * .5));
+    for (let i = 0; i < 6; i++) { o.globalAlpha = .4 - i * .06; opR(o, '#ffc070', dx - i * 3, gy + i * 2, dw + i * 6, 2); }   // light spills out
+    o.globalAlpha = 1;
+    for (let i = 0; i < 9; i++) {                       // planks flying
+      const t2 = Math.min(d, 1.4), vx = (30 + hash2(i, 61) * 60) * (i % 3 === 0 ? -1 : 1) * s * 2, vy = -(40 + hash2(i, 62) * 50) * s * 2;
+      const px = dx + dw * hash2(i, 63) + vx * t2, py = dTop + dh * hash2(i, 64) + vy * t2 + 240 * s * t2 * t2, ang = i + t2 * (6 + i);
+      if (py < gy + 2) opLine(o, '#5a3a24', px, py, px + Math.cos(ang) * 12 * s, py + Math.sin(ang) * 12 * s, u);
+    }
+    if (d < .16) OP.flash = .7 * (1 - d / .16);
+    if (d < .45) OP.shake = 3 * (1 - d / .45);
+  }
+  // he walks in, raises the hammer, and brings it down
+  const kx = st < .8 ? lerp(-60 * s, kx0, opEase(st / .8)) : kx0, walk = st < .8 ? Math.floor(st * 8) % 2 : 0;
+  opKing(o, kx, gy - walk, s, T, { state:st > .8 && d < 0 ? 'kwind' : 'idle', pose:d >= 0 && d < .9 ? 1 : 0, side:-1 });
+  if (d >= 0 && d < .12) for (let a = -.45; a < .9; a += .12) {   // the swing's smear, from over his head into the door
+    const r = 50 * s; opR(o, '#e8ecff', kx + 36 * s + Math.sin(a) * r, gy - 40 * s - Math.cos(a) * r, 2, 2);
+  }
+  opCue('step1', .1, () => tone(70, .2, 'sine', .3, 0, 50)); opCue('step2', .5, () => tone(66, .2, 'sine', .3, 0, 48));
+  opCue('raise', .85, () => tone(140, .5, 'sawtooth', .04, 0, 260));
+  opCue('smash', 1.42, () => { sfx.boom(); noise(.3, 1400, .3); buzz(40); });
+}
+function opBlaze(o, F, st, T){                          // your home burns
+  const cx = F.cx, u = F.tall && F.w >= 118 ? 2 : 1, hx = cx + (F.tall ? 0 : 26), hy = F.gy + 2;
+  opSky(o, 'blaze', ['#07060c', '#100a16', '#22101e', '#3e1620', '#62201e', '#86301e'], F.top, F.gy);
+  opStars(o, T, F.top + 20, 14, .5);
+  opSmoke(o, hx + 4 * u, hy - 40 * u, T, 10, F.gy - F.top + 20, '#1a1220', 16 * u, u * 1.1);
+  opRidge(o, '#0e0a14', F.gy - 6, 5, .06, 5);
+  opGround(o, F, '#120d14', '#1d151c');
+  opGlow(o, '#ff6a2a', hx, hy - 22 * u, 56 * u, .07 + Math.sin(T * 9) * .012);
+  opHouse(o, hx, hy, 'fire', T, u);
+  opFire(o, hx - 27 * u, hx + 27 * u, x => opRoofY(x, hx, hy, u), 13 * u, T, 1);
+  opFire(o, hx - 18 * u, hx - 11 * u, hy - 16 * u, 6 * u, T, 4);
+  opFire(o, hx + 12 * u, hx + 19 * u, hy - 16 * u, 6 * u, T, 7);
+  opEmbers(o, hx - 30 * u, hx + 30 * u, hy - 30 * u, 70 * u, T, 30);
+  // the King, black against the flames; you, down in the dirt
+  opKing(o, F.tall ? cx - 26 : cx - 30, F.fy - (F.tall ? 4 : 0), 1 / 2.3, T, { dark:'rgba(10,5,12,.6)' });
+  const yx = F.tall ? cx + 18 : cx - 70, yy = Math.min(F.bot - 2, F.fy + (F.tall ? 22 : 8));
+  opPut(o, opBody('hero', 'downL'), yx, yy - (Math.sin(st * 2.2) > .6 ? 1 : 0), 1);
+  opBlade(o, yx + 14, yy - 1, .15, 9, false);
+  for (let i = 0; i < 8; i++) opCue('crackle' + i, .2 + i * .52, () => noise(.07 + Math.random() * .08, 1800 + Math.random() * 2400, .06));
+}
+function opTaken(o, F, st, T){                          // the Wraith carries your brother off toward the Tower
+  const cx = F.cx, fx = Math.round(F.w * .14), tx = Math.round(F.w * .84), rb = F.gy - 7;
+  opSky(o, 'night', OP_NIGHT, F.top, F.gy);
+  opStars(o, T, F.gy - 10, 60, 1);
+  opRidge(o, '#100f1f', rb, 4, .06, 3);
+  opTowerFar(o, tx, opRidgeY(tx, rb, 4, .06, 3) + 2, T, 2);
+  const fy0 = opRidgeY(fx, rb, 4, .06, 3) + 2;          // far behind, your home still burns
+  opGlow(o, '#ff6a2a', fx, fy0 - 6, 16, .08); opSmoke(o, fx, fy0 - 14, T, 5, 40, '#1a1424', 8, .6);
+  opR(o, '#140f18', fx - 7, fy0 - 6, 14, 6); for (let r = 0; r < 5; r++) opR(o, '#140f18', fx - 8 + r, fy0 - 7 - r, 16 - 2 * r, 1);
+  opFire(o, fx - 7, fx + 8, x => fy0 - 7 - Math.max(0, 5 - Math.abs(x - fx)), 6, T, 9);
+  opGround(o, F, '#0b0c16', '#141626');
+  const wx = Math.round(lerp(cx - 14, cx + 22, clamp(st / 3.9, 0, 1))), wy = F.gy + Math.round((F.fy - F.gy) * .35), bob = Math.floor(st * 5) % 2;
+  if (st < 3.9) {                                       // your brother over his shoulder, kicking
+    opPut(o, opBody('bro', 'downR'), wx + 8, wy - 9 - bob - Math.floor(st * 3) % 2, 1);
+    opPut(o, opSprite('wraith', WRAITH_PX, WRAITH_PAL), wx, wy - bob, 1);
+  } else if (st < 4.4) {                                // and he's gone, in a blur, like his dashes in the arena
+    for (let i = 0; i < 3; i++) opPut(o, opSprite('wraithGhost', WRAITH_PX, OP_GHOST_PAL), wx + 10 + i * 14, wy, 1, .5 * (1 - (st - 3.9) / .5) * (1 - i * .25));
+  }
+  opCue('blink', 3.9, () => { sfx.blink(); tone(330, .5, 'sine', .04, .05, 220); });
+  const yx = cx - (F.tall ? 26 : 40), yy = F.bot - Math.round(F.fh * .06), reach = st < 4.6;   // you, face down, reaching after them
+  if (reach) { opR(o, '#15162a', yx + 10, yy - 9, 24, 5); opR(o, SKINS[lookOf(meta.look).skin].c, yx + 11, yy - 8, 22, 3); opR(o, '#15162a', yx + 33, yy - 10, 1, 7); }
+  opPut(o, opBody('hero', 'downR'), yx, yy, 2);
+}
+function opGraves(o, F, st, T){                         // dawn: ashes, two graves, and you
+  const cx = F.cx, fy = F.fy, sx = cx - Math.round(F.w * .22), sy = F.gy - 12 - Math.round(st * 1.5);
+  opSky(o, 'dawn', ['#232335', '#3a384f', '#5c5266', '#866c74', '#b08a80', '#d0a888'], F.top, F.gy);
+  opGlow(o, '#ffd6a0', sx, sy, 26, .06); opDisc(o, '#f0d2a0', sx, sy, 7);
+  opCloud(o, '#7a6676', sx - 30 + st * 2, sy + 4, 30); opCloud(o, '#6a5a6c', cx + 20 - st, F.top + 30, 36);
+  opRidge(o, '#4a4258', F.gy - 14, 6, .05, 6);
+  opRidge(o, '#353046', F.gy - 5, 4, .08, 8);
+  opGround(o, F, '#2a2830', '#36343c');
+  opHouse(o, cx + (F.tall ? 26 : 48), F.gy + 3, 'ruin', T);
+  for (let i = 0; i < 26; i++) { const ph = (T * .06 + hash2(i, 71)) % 1; opR(o, '#8a8490', hash2(i, 72) * F.w + Math.sin(T + i) * 4, F.top + ph * (F.bot - F.top), 1, 1); }
+  opGrave(o, cx + (F.tall ? 4 : 0), fy - 2, '#d8546a'); opGrave(o, cx + 30, fy - 2, '#e8c45a');
+  const hx = cx - (F.tall ? 30 : 32);
+  if (st < 3.1) { opPut(o, opBody('hero', 'kneel'), hx, fy, 2); opLine(o, '#15162a', hx + 13, fy - 24, hx + 13, fy + 1, 4); opLine(o, '#a8723a', hx + 13, fy - 23, hx + 13, fy, 2); }   // kneeling, leaning on your stick
+  else opFighter(o, 'hero', hx, fy, -1.2, 2, false);  // you stand, stick in hand
+  opCue('lament', .4, () => [392, 349, 294, 262].forEach((f, i) => tone(f, .9, 'triangle', .045, i * .45)));
+  opCue('rise', 3.1, () => tone(196, .6, 'sine', .08, 0, 262));
+}
+function opLog(o, F, st, T){                            // montage: summer, a log on a rope
+  const cx = F.cx, fy = F.fy, hx = cx + (F.tall ? 24 : 20), A = .75, Lr = Math.round(clamp(F.fh * .3, 36, 62));
+  const tip = { x:hx - 26, y:fy - 33 }, py = Math.round(tip.y - Lr * Math.cos(A)), px = Math.round(tip.x - 10 - Lr * Math.sin(A)), tx = px - 24;
+  opSky(o, 'day', ['#2e5a98', '#4374b2', '#6994c8', '#93b6da', '#bcd4e6'], F.top, F.gy);
+  const sx = cx + Math.round(F.w * .3); opGlow(o, '#fff2c0', sx, F.top + 18, 22, .08); opDisc(o, '#fff6d8', sx, F.top + 18, 6);
+  for (let i = 0; i < 3; i++) opCloud(o, '#e8f0f6', (i * 83 + st * 6) % (F.w + 60) - 30, F.top + 14 + i * 13, 22 + i * 6);
+  opRidge(o, '#5d8f6a', F.gy - 12, 6, .05, 2);
+  opRidge(o, '#467a52', F.gy - 3, 4, .08, 5);
+  opGround(o, F, '#3d6e43', '#4f8a55');
+  opTufts(o, F, '#5a9a5e', Math.round(F.w * .35), 5, 0, ['#f0e070', '#ffffff', '#e87a9a']);
+  opR(o, '#3a2618', tx - 4, py - 6, 8, fy - py + 6); opR(o, '#3a2618', tx, py - 2, px - tx + 3, 3);
+  opDisc(o, '#2f5a33', tx + 2, py - 14, 16); opDisc(o, '#3d7040', tx - 2, py - 18, 11); opDisc(o, '#4f8a4a', tx - 5, py - 21, 5);
+  const th = A * Math.sin(2 * Math.PI * (st - .35) / 1.6), lx = px + Lr * Math.sin(th), ly = py + Lr * Math.cos(th);
+  opLine(o, '#c8b088', px, py + 1, lx, ly - 3);
+  opR(o, '#2a1a10', lx - 10, ly - 4, 20, 8); opR(o, '#7a5232', lx - 9, ly - 3, 18, 6); opR(o, '#94683e', lx - 9, ly - 3, 18, 2); opR(o, '#c8a070', lx + 7, ly - 3, 2, 6);
+  let sa = -2.3;
+  for (const tc of [.75, 2.35]) {                      // each swing, knocked back at its peak
+    const d = st - tc; sa = Math.min(sa, lerp(-2.3, -2.75, Math.max(0, 1 - Math.abs(d) / .15)));
+    if (d >= 0 && d < .16) opSpark(o, tip.x - 1, tip.y, d < .08 ? 6 : 3);
+    opCue('thock' + tc, tc, () => { noise(.06, 900, .25); tone(190, .09, 'square', .06); sfx.parry(); });
+  }
+  opFighter(o, 'hero', hx, fy, sa, 2, false);
+}
+function opSeasons(o, F, st, T){                        // montage: autumn into winter, stones from both sides
+  const cx = F.cx, fy = F.fy, w = st > 1.6;
+  opSky(o, w ? 'winter' : 'autumn', w ? ['#1e2638', '#34405a', '#56667e', '#8494aa'] : ['#3a3048', '#5e4458', '#8e5e5c', '#c48a62'], F.top, F.gy);
+  opRidge(o, w ? '#6a7890' : '#6a4a4a', F.gy - 12, 6, .05, 9);
+  opRidge(o, w ? '#9aa8bc' : '#5a4038', F.gy - 3, 4, .08, 11);
+  opGround(o, F, w ? '#c8d2de' : '#5a4a32', w ? '#e8eef4' : '#76603e');
+  opTufts(o, F, w ? '#a8b4c4' : '#7a6440', Math.round(F.w * .25), 7);
+  for (const tx of [cx - 50, cx + 52, cx - 86, cx + 90]) opTree(o, tx, F.gy + 4, T, w ? ['#3a3e4e', '#c8d2e0', '#ffffff'] : ['#7a3a1e', '#b85a26', '#e09a3a']);
+  for (let i = 0; i < 30; i++) {                        // falling leaves, then snow
+    const ph = (T * (w ? .12 : .2) + hash2(i, 81)) % 1, x = hash2(i, 82) * F.w + Math.sin(T * 2 + i) * (w ? 2 : 6) - (w ? 0 : ph * 20);
+    opR(o, w ? '#ffffff' : ['#e09a3a', '#c8602a', '#f0c050'][i % 3], x, F.top + ph * (F.bot - F.top), w ? 1 : 2, 1);
+  }
+  if (st > 1.6 && st < 1.76) OP.flash = .6 * (1 - (st - 1.6) / .16);
+  let sa = -1.57;
+  [.55, 1.05, 1.5, 2.1, 2.65].forEach((tc, i) => {
+    const side = i % 2 ? 1 : -1, d = st - tc, C = { x:cx + side * 26, y:fy - 26 };
+    if (d > -.4 && d < 0) { const q = (d + .4) / .4; opRock(o, lerp(cx + side * (F.w / 2 + 10), C.x, q), C.y - Math.sin(q * Math.PI) * 6); }
+    else if (d >= 0 && d < .8) opRock(o, C.x + side * 70 * d, C.y - 90 * d + 160 * d * d);
+    if (Math.abs(d) < .14) sa = side < 0 ? -2.99 : -.15;
+    if (d >= 0 && d < .15) opSpark(o, C.x, C.y, d < .07 ? 5 : 3);
+    opCue('rock' + i, tc, () => sfx.parry());
+  });
+  opFighter(o, 'hero', cx, fy, sa, 2, false);
+}
+function opStorm(o, F, st, T){                          // montage: a storm of arrows, and one Perfect
+  const cx = F.cx, fy = F.fy, ch = fy - 22, tp = 2.55, dp = st - tp, slow = Math.abs(dp) < .45 ? .25 : 1;
+  opSky(o, 'storm', ['#04040a', '#08081a', '#0e0e26', '#151532', '#1c1b3a'], F.top, F.gy);
+  for (const b of [.3, 1.95]) if (st > b && st < b + .14) { OP.flash = .45; opBolt(o, cx + (b < 1 ? -.3 : .28) * F.w, F.top, F.gy - 8, b * 10 | 0); }
+  opCue('thunder1', .3, () => { noise(.9, 140, .4, 'lowpass'); tone(48, .8, 'sine', .3, 0, 32); });
+  opCue('thunder2', 1.95, () => { noise(.9, 140, .35, 'lowpass'); tone(44, .8, 'sine', .25, 0, 30); });
+  opRidge(o, '#0c0c1c', F.gy - 8, 5, .06, 12);
+  opGround(o, F, '#0e1120', '#1a1e34');
+  o.fillStyle = '#5a6a9a';
+  for (let i = 0; i < 70; i++) { const ph = (T * 1.6 * slow + hash2(i, 91)) % 1; o.fillRect(Math.round(hash2(i, 92) * (F.w + 30) - ph * 20), Math.round(F.top + ph * (F.bot - F.top)), 1, 3); }
+  let sa = -1.57;
+  [[.5, Math.PI], [.85, 0], [1.2, -2.5], [1.55, -.65]].forEach(([tc, dir], i) => {
+    const d = st - tc, C = { x:cx + Math.cos(dir) * 28, y:ch + Math.sin(dir) * 28 };
+    if (d > -.3 && d < 0) { const r = lerp(120, 28, (d + .3) / .3); opArrow(o, cx + Math.cos(dir) * r, ch + Math.sin(dir) * r, dir + Math.PI); }
+    else if (d >= 0 && d < .6) opArrow(o, C.x + Math.cos(dir) * 60 * d, C.y - 70 * d + 120 * d * d, dir + d * 14);
+    if (Math.abs(d) < .13) sa = dir;
+    if (d >= 0 && d < .14) opSpark(o, C.x, C.y, d < .07 ? 5 : 3);
+    opCue('arrow' + i, tc, () => sfx.parry());
+  });
+  const dir = -.45, C = { x:cx + Math.cos(dir) * 28, y:ch + Math.sin(dir) * 28 };   // the last one, in slow motion
+  if (dp > -.9 && dp < 0) { const r = lerp(150, 28, (dp + .9) / .9); opArrow(o, cx + Math.cos(dir) * r, ch + Math.sin(dir) * r, dir + Math.PI, 16, 2, '#ffffff'); }
+  else if (dp >= 0 && dp < .8) opArrow(o, C.x + Math.cos(dir) * 90 * dp, C.y - 120 * dp, dir + dp * 9, 16, 2, '#ffffff');
+  if (dp > -.25 && dp < .3) sa = dir;
+  if (dp >= 0 && dp < .7) {
+    opRing(o, '#ffffff', C.x, C.y, 4 + dp * 70); opRing(o, '#f4b73e', C.x, C.y, 2 + dp * 45);
+    if (dp < .12) { OP.flash = .5; opSpark(o, C.x, C.y, 7, '#ffffff'); }
+    OP.texts.push({ x:cx, y:ch - 34, text:'PERFECT', css:26, color:'#e9fdff', a:clamp((.7 - dp) / .3, 0, 1) });
+  }
+  opCue('perfect', tp, () => sfx.perfect());
+  opFighter(o, 'hero', cx, fy, sa, 2, true);
+}
+function opArrive(o, F, st, T){                         // years later: the Tower
+  const cx = F.cx, TH = Math.round(F.fh * (F.tall ? 1.15 : 1.8)), lift = Math.max(0, TH + 28 - (F.gy - F.top)), cam = Math.round(lift * opEase((st - 1.8) / 2.6)), gy = F.gy + cam;
+  opSky(o, 'dread', ['#07060c', '#0f0b16', '#1a1020', '#2a1426', '#3e1a2a', '#521e2c'], F.top, F.gy);
+  for (let i = 0; i < 6; i++) opCloud(o, i % 2 ? '#1c1226' : '#24162c', (i * 61 + T * (4 + i)) % (F.w + 80) - 40, F.top + 8 + i * 9 + cam * .15, 30 + i * 4);
+  opRidge(o, '#120c18', F.gy - 10 + Math.round(cam * .4), 6, .05, 13);
+  opGround(o, F, '#0e0b12', '#18131e', 0, gy);
+  if (st > 3.7 && st < 3.84) { OP.flash = .4; opBolt(o, cx + 6, F.top, gy - TH - 10, 37); }
+  opTower(o, cx, gy + 2, TH, F.tall ? 40 : 50, T);
+  for (let i = 0; i < 6; i++) {                         // bats wheel around the top
+    const a = T * (1.1 + i * .13) + i * 1.3, bx = Math.round(cx + Math.cos(a) * (16 + i * 4)), by = Math.round(gy - TH - 6 + Math.sin(a) * 5 + i * 4), up = Math.floor(T * 8 + i) % 2 ? -1 : 1;
+    opR(o, '#07060c', bx, by, 1, 1); opR(o, '#07060c', bx - 1, by, 1, 1); opR(o, '#07060c', bx + 1, by, 1, 1); opR(o, '#07060c', bx - 2, by + up, 1, 1); opR(o, '#07060c', bx + 2, by + up, 1, 1);
+  }
+  const hx = Math.round(lerp(-12, cx - (F.tall ? 30 : 40), opEase(st / 1.8))), walk = st < 1.8 ? Math.floor(st * 8) % 2 : 0;
+  opFighter(o, 'hero', hx, gy + 6 - walk, 1.15, 1, true);
+  opCue('bell', 2, () => sfx.dong(true));
+  opCue('thunder', 3.7, () => { noise(1.1, 120, .4, 'lowpass'); tone(41, 1, 'sine', .28, 0, 30); });
+}
+function opCard(o, F, st, T){                           // Chapter 1: the Tower
+  opSky(o, 'card', ['#05050b', '#09070f', '#120a16', '#1c0e1c'], F.top, F.bot);
+  opTower(o, F.cx, F.bot + 10, Math.round(F.fh * 1.1), F.tall ? 44 : 56, T, false);
+  o.globalAlpha = .55; opR(o, '#05050b', 0, 0, F.w, F.h); o.globalAlpha = 1;
+  opCue('end', .1, () => { tone(98, 2.5, 'triangle', .07); tone(147, 2.2, 'sine', .05, .1); tone(196, 2, 'sine', .03, .2); });
 }
 
 /* ================= NEW ENEMY CARD ================= */
